@@ -8,16 +8,54 @@ html, body, #root {
   padding: 0;
   background-color: #0f172a;
   color: white;
+  overflow-x: hidden;
 }
 
-/* Arreglo para gráficos */
+/* Contenedor principal para evitar colapsos de layout */
+main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+/* ARREGLO CRÍTICO PARA GRÁFICOS (Recharts)
+   Fuerza un tamaño inicial para que la librería no intente 
+   renderizar con valores negativos mientras se calcula el layout.
+*/
 .recharts-responsive-container {
-    min-height: 300px;
+    min-height: 300px !important;
+    min-width: 100% !important;
     width: 100% !important;
     height: 100% !important;
 }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: #0f172a; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-.scrollbar-hide::-webkit-scrollbar { display: none; }
+/* Personalización de Scrollbars (Moderno) */
+::-webkit-scrollbar { 
+  width: 8px; 
+  height: 8px; 
+}
+
+::-webkit-scrollbar-track { 
+  background: #0f172a; 
+}
+
+::-webkit-scrollbar-thumb { 
+  background: #334155; 
+  border-radius: 4px; 
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Utilidad para ocultar scrollbars */
+.scrollbar-hide::-webkit-scrollbar { 
+  display: none; 
+}
+
+/* Animaciones suaves para cambios de vista */
+.animate-in {
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
