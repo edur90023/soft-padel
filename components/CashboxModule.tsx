@@ -30,12 +30,12 @@ export const CashboxModule: React.FC<CashboxModuleProps> = ({ config, role, acti
     const isBoxOpen = lastShiftEvent?.description.includes('Apertura');
     const boxOpenTimestamp = isBoxOpen ? lastShiftEvent?.timestamp : null;
 
-    // 2. FILTRAR ACTIVIDAD DESDE LA APERTURA HASTA AHORA (Ventas del Turno)
+    // 2. FILTRAR ACTIVIDAD DESDE LA APERTURA (Incluyendo la apertura misma)
     const turnActivity = useMemo(() => {
         if (!isBoxOpen || !boxOpenTimestamp) return [];
         return activities.filter(act => 
             new Date(act.timestamp) >= new Date(boxOpenTimestamp) && 
-            (act.type === 'SALE' || act.type === 'BOOKING')
+            (act.type === 'SALE' || act.type === 'BOOKING' || act.type === 'SHIFT')
         );
     }, [activities, isBoxOpen, boxOpenTimestamp]);
 
@@ -45,7 +45,7 @@ export const CashboxModule: React.FC<CashboxModuleProps> = ({ config, role, acti
         return expenses.filter(exp => new Date(`${exp.date}T12:00:00`) >= new Date(boxOpenTimestamp));
     }, [expenses, boxOpenTimestamp, isBoxOpen, role]);
 
-    // 4. CÁLCULO DE TOTALES POR MÉTODO (Para el gráfico)
+    // 4. CÁLCULO DE TOTALES POR MÉTODO (Solo ventas y reservas)
     const incomeByMethod = useMemo(() => {
         const data = [
             { name: 'Efectivo', value: 0, color: '#22c55e', method: PaymentMethod.CASH },
@@ -53,7 +53,7 @@ export const CashboxModule: React.FC<CashboxModuleProps> = ({ config, role, acti
             { name: 'Transferencia', value: 0, color: '#a855f7', method: PaymentMethod.TRANSFER },
         ];
         turnActivity.forEach(act => {
-            if (act.amount && act.method) {
+            if (act.amount && act.method && (act.type === 'SALE' || act.type === 'BOOKING')) {
                 const idx = data.findIndex(d => d.method === act.method);
                 if (idx !== -1) data[idx].value += act.amount;
             }
@@ -65,14 +65,14 @@ export const CashboxModule: React.FC<CashboxModuleProps> = ({ config, role, acti
     const totalExpensesAmount = turnExpenses.reduce((acc, curr) => acc + curr.amount, 0);
     const turnBalance = totalIncome - totalExpensesAmount;
 
-    // LÍNEA DE TIEMPO COMBINADA
+    // LÍNEA DE TIEMPO COMBINADA PARA EL LISTADO
     const timeline = useMemo(() => {
         const events = [
             ...turnActivity.map(e => ({
                 id: e.id,
                 time: e.timestamp,
-                type: 'INCOME',
-                category: e.type,
+                type: e.type === 'SHIFT' ? 'SYSTEM' : 'INCOME',
+                category: e.type === 'SHIFT' ? 'CAJA' : e.type,
                 description: e.description,
                 amount: e.amount || 0,
                 method: e.method,
@@ -96,10 +96,8 @@ export const CashboxModule: React.FC<CashboxModuleProps> = ({ config, role, acti
         if (!amountInput) return;
         const val = parseFloat(amountInput);
         if (isBoxOpen) {
-            // Lógica de Cierre
             onLogActivity('SHIFT', `Cierre de Caja. Monto Final Declarado: $${val}. Sistema: $${totalIncome}`, val);
         } else {
-            // Lógica de Apertura
             onLogActivity('SHIFT', `Apertura de Caja. Monto Inicial: $${val}`, val);
         }
         setAmountInput('');
@@ -160,7 +158,7 @@ export const CashboxModule: React.FC<CashboxModuleProps> = ({ config, role, acti
                     </div>
                 </div>
 
-                {/* VENTAS DEL TURNO (ACTUALIZADO) */}
+                {/* VENTAS DEL TURNO */}
                 <div className="lg:col-span-2 bg-slate-900/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-xl flex flex-col">
                     <div className="flex justify-between items-start mb-4">
                         <div>
@@ -203,7 +201,7 @@ export const CashboxModule: React.FC<CashboxModuleProps> = ({ config, role, acti
                 </div>
             </div>
 
-            {/* LISTADO DE MOVIMIENTOS DEL TURNO */}
+            {/* LISTADO DE MOVIMIENTOS DEL TURNO CORREGIDO */}
             <div className="bg-slate-900/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-lg">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-white font-bold text-lg flex items-center gap-2"><Calendar size={20}/> Movimientos del Turno</h3>
@@ -227,12 +225,17 @@ export const CashboxModule: React.FC<CashboxModuleProps> = ({ config, role, acti
                                 <tr key={act.id} className="hover:bg-white/5 transition-colors">
                                     <td className="px-4 py-3 font-mono text-slate-500">{new Date(act.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
                                     <td className="px-4 py-3">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border flex w-fit items-center gap-1 ${act.type === 'EXPENSE' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'}`}>
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border flex w-fit items-center gap-1 ${
+                                            act.type === 'EXPENSE' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 
+                                            act.category === 'CAJA' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                                            'bg-green-500/10 text-green-400 border-green-500/20'}`}>
                                             {act.type === 'EXPENSE' ? <ArrowDownCircle size={10}/> : <ArrowUpCircle size={10}/>} {act.category}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-slate-200">{act.description}</td>
-                                    <td className={`px-4 py-3 text-right font-mono font-bold ${act.type === 'EXPENSE' ? 'text-red-400' : 'text-white'}`}>{act.type === 'EXPENSE' ? '-' : ''}{formatMoney(act.amount)}</td>
+                                    <td className={`px-4 py-3 text-right font-mono font-bold ${act.type === 'EXPENSE' ? 'text-red-400' : 'text-white'}`}>
+                                        {act.type === 'EXPENSE' ? '-' : ''}{formatMoney(act.amount)}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
