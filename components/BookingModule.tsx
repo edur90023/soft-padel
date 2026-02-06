@@ -59,11 +59,13 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
   const openPaymentModal = async (booking: Booking, method: PaymentMethod) => {
       setPaymentModal({ isOpen: true, type: method, booking });
       setQrUrl(null); 
+
       if (method === PaymentMethod.QR) {
           setIsLoadingQr(true);
           const fee = config.mpFeePercentage || 0;
           const finalPrice = booking.price + (booking.price * fee / 100);
           const title = `Reserva Cancha - ${booking.date} ${booking.time}`;
+          
           const url = await createPreference(title, finalPrice);
           setQrUrl(url);
           setIsLoadingQr(false);
@@ -73,6 +75,7 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
   const handlePaymentSelect = (e: React.MouseEvent, booking: Booking, method?: PaymentMethod) => {
       e.stopPropagation(); 
       setActiveDropdownId(null); 
+
       if (!method) {
           onUpdateBooking({ ...booking, paymentMethod: undefined });
           return;
@@ -82,7 +85,11 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
 
   const handleConfirmPayment = () => {
       if (!paymentModal.booking || !paymentModal.type) return;
-      const updated = { ...paymentModal.booking, paymentMethod: paymentModal.type, status: BookingStatus.CONFIRMED };
+      const updated = { 
+          ...paymentModal.booking, 
+          paymentMethod: paymentModal.type,
+          status: BookingStatus.CONFIRMED 
+      };
       onUpdateBooking(updated);
       setPaymentModal({ isOpen: false, type: null, booking: null });
   };
@@ -104,6 +111,16 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
           case PaymentMethod.TRANSFER: return <CreditCard size={14} />;
           default: return <AlertCircle size={14} />;
       }
+  };
+
+  const getFinalPrice = () => {
+      if (!paymentModal.booking || !paymentModal.type) return 0;
+      const basePrice = paymentModal.booking.price;
+      if (paymentModal.type === PaymentMethod.QR) {
+          const fee = config.mpFeePercentage || 0;
+          return basePrice * (1 + fee / 100);
+      }
+      return basePrice;
   };
 
   return (
@@ -216,12 +233,16 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
           </div>
       )}
 
+      {/* MODAL DE PAGO CORREGIDO */}
       {paymentModal.isOpen && paymentModal.booking && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
               <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative">
                   <button onClick={() => setPaymentModal({ ...paymentModal, isOpen: false })} className="absolute right-4 top-4 text-slate-400 hover:text-white"><X size={20}/></button>
                   <div className="text-center mb-6">
-                      <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg border border-white/5 ${paymentModal.type === PaymentMethod.CASH ? 'bg-green-500/20 text-green-500 border-green-500/30' : paymentModal.type === PaymentMethod.QR ? 'bg-blue-500/20 text-blue-500 border-blue-500/30' : 'bg-purple-500/20 text-purple-500 border-purple-500/30'}`}>
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg border border-white/5 
+                        ${paymentModal.type === PaymentMethod.CASH ? 'bg-green-500/20 text-green-500 border-green-500/30' : 
+                          paymentModal.type === PaymentMethod.QR ? 'bg-blue-500/20 text-blue-500 border-blue-500/30' : 
+                          'bg-purple-500/20 text-purple-500 border-purple-500/30'}`}>
                           {paymentModal.type === PaymentMethod.CASH && <Banknote size={32}/>}
                           {paymentModal.type === PaymentMethod.QR && <QrCode size={32}/>}
                           {paymentModal.type === PaymentMethod.TRANSFER && <CreditCard size={32}/>}
@@ -229,9 +250,64 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
                       <h3 className="text-xl font-bold text-white mb-1">
                           {paymentModal.type === PaymentMethod.CASH ? 'Pago Efectivo' : paymentModal.type === PaymentMethod.QR ? 'Cobro QR' : 'Transferencia'}
                       </h3>
-                      <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 mt-4"><p className="text-slate-400 text-sm mb-1">Total a cobrar</p><span className="text-white font-bold text-2xl block">{formatMoney(paymentModal.type === PaymentMethod.QR ? paymentModal.booking.price * (1 + (config.mpFeePercentage || 0) / 100) : paymentModal.booking.price)}</span></div>
+                      {paymentModal.type === PaymentMethod.QR && (config.mpFeePercentage || 0) > 0 && (
+                          <div className="text-xs text-orange-400 mb-2 font-bold bg-orange-500/10 px-2 py-1 rounded inline-block border border-orange-500/20">
+                             Recargo: {config.mpFeePercentage}% aplicado
+                          </div>
+                      )}
+                      <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 mt-4">
+                          <p className="text-slate-400 text-sm mb-1">Total a cobrar</p>
+                          <span className="text-white font-bold text-2xl block">{formatMoney(getFinalPrice())}</span>
+                      </div>
                   </div>
-                  <button onClick={handleConfirmPayment} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2"><CheckCircle size={20}/> Confirmar Cobro Realizado</button>
+
+                  {/* CONTENIDO DE QR (Igual al POS) */}
+                  {paymentModal.type === PaymentMethod.QR && (
+                      <div className="bg-white p-4 rounded-xl mb-6 mx-auto w-fit shadow-inner min-h-[230px] flex flex-col items-center justify-center">
+                          {isLoadingQr ? (
+                              <div className="flex flex-col items-center animate-pulse">
+                                  <Loader2 className="animate-spin text-blue-500 mb-2" size={32}/>
+                                  <span className="text-xs text-slate-500 font-bold">Generando QR...</span>
+                              </div>
+                          ) : qrUrl ? (
+                              <>
+                                  <img 
+                                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}`}
+                                      alt="QR de Pago" 
+                                      className="w-48 h-48 object-contain"
+                                  />
+                                  <p className="text-black/50 text-[10px] text-center mt-2 font-mono">Escanea con Mercado Pago</p>
+                              </>
+                          ) : (
+                              <p className="text-red-500 text-xs font-bold text-center p-4">Error al conectar con MP.</p>
+                          )}
+                      </div>
+                  )}
+
+                  {/* CONTENIDO DE TRANSFERENCIA (Con Alias corregido) */}
+                  {paymentModal.type === PaymentMethod.TRANSFER && (
+                      <div className="space-y-4 mb-6">
+                          <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 text-center">
+                              <p className="text-xs text-slate-500 uppercase font-bold mb-1">Alias / CBU</p>
+                              <div className="flex items-center justify-center gap-2">
+                                  <span className="text-xl font-mono text-white font-bold tracking-wider select-all">
+                                      {config.mpAlias || 'SIN ALIAS'}
+                                  </span>
+                                  <button onClick={() => navigator.clipboard.writeText(config.mpAlias || '')} className="text-slate-400 hover:text-white p-1" title="Copiar"><Copy size={14}/></button>
+                              </div>
+                          </div>
+                          <button onClick={() => {
+                              const text = `Hola! Para confirmar tu turno de ${formatMoney(getFinalPrice())}, por favor transferí al alias: *${config.mpAlias}* y envianos el comprobante.`;
+                              window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                          }} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+                              <Share2 size={18}/> Enviar por WhatsApp
+                          </button>
+                      </div>
+                  )}
+
+                  <button onClick={handleConfirmPayment} className={`w-full font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 active:scale-95 ${paymentModal.type === PaymentMethod.CASH ? 'bg-green-600 hover:bg-green-500 text-white shadow-green-500/20' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/20'}`}>
+                      <CheckCircle size={20}/> {paymentModal.type === PaymentMethod.CASH ? 'Sí, Dinero Recibido' : 'Confirmar Cobro Realizado'}
+                  </button>
               </div>
           </div>
       )}
@@ -274,7 +350,7 @@ const BookingFormModal = ({ isOpen, onClose, courts, onSave, initialDate, initia
         e.preventDefault();
         if (!form.courtId) return alert("Por favor selecciona una cancha disponible.");
         if (!checkAvailability(form.courtId, form.date!, form.time!, form.duration!)) {
-            return alert("⚠️ ERROR: El horario ya no está disponible para esta cancha.");
+            return alert("⚠️ ERROR: El horario ya no está disponible.");
         }
         onSave({ ...form as Booking, id: isEditMode ? form.id : `b${Date.now()}` }); 
     };
