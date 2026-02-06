@@ -26,10 +26,13 @@ export interface Court {
   type: 'Indoor' | 'Outdoor';
   surfaceColor: 'blue' | 'green' | 'red' | 'yellow';
   status: 'AVAILABLE' | 'MAINTENANCE';
+  // Pricing
   basePrice: number;
+  // Offer 1
   isOffer1Active: boolean;
   offer1Price: number;
   offer1Label?: string;
+  // Offer 2
   isOffer2Active: boolean;
   offer2Price: number;
   offer2Label?: string;
@@ -47,7 +50,7 @@ export interface Booking {
   paymentMethod?: PaymentMethod;
   price: number;
   isRecurring: boolean;
-  seriesId?: string; // Para agrupar turnos fijos
+  seriesId?: string; // <--- Identificador para agrupar turnos fijos semanales
 }
 
 export interface Product {
@@ -64,6 +67,23 @@ export interface CartItem extends Product {
   quantity: number;
 }
 
+export interface CashSession {
+  id: string;
+  openedAt: string;
+  closedAt: string | null;
+  openedBy: string;
+  initialAmount: number;
+  finalAmount: number | null;
+  status: 'OPEN' | 'CLOSED';
+}
+
+export interface Advertisement {
+  id: string;
+  imageUrl: string;
+  linkUrl?: string;
+  isActive: boolean;
+}
+
 export interface ClubConfig {
   name: string;
   logoUrl?: string;
@@ -74,18 +94,15 @@ export interface ClubConfig {
   bookingBackgroundImage?: string;
   ads: Advertisement[];
   adRotationInterval: number;
+  
+  // Promotion Config
   promoActive: boolean;
   promoText: string;
   promoPrice: number;
+
+  // Payment Config
   mpAlias: string;
   mpFeePercentage: number;
-}
-
-export interface Advertisement {
-  id: string;
-  imageUrl: string;
-  linkUrl?: string;
-  isActive: boolean;
 }
 
 export type ActivityType = 'BOOKING' | 'SALE' | 'SHIFT' | 'SYSTEM' | 'STOCK';
