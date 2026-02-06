@@ -25,7 +25,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
   
-  // Estado del Modal de Pago
   const [paymentModal, setPaymentModal] = useState<{ isOpen: boolean, type: PaymentMethod | null, booking: Booking | null }>({ isOpen: false, type: null, booking: null });
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [isLoadingQr, setIsLoadingQr] = useState(false);
@@ -57,19 +56,14 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
       setIsFormModalOpen(true);
   };
 
-  // --- LÓGICA DE PAGO ---
-
   const openPaymentModal = async (booking: Booking, method: PaymentMethod) => {
       setPaymentModal({ isOpen: true, type: method, booking });
       setQrUrl(null); 
-
-      // Si es QR, generamos el link de pago
       if (method === PaymentMethod.QR) {
           setIsLoadingQr(true);
           const fee = config.mpFeePercentage || 0;
           const finalPrice = booking.price + (booking.price * fee / 100);
           const title = `Reserva Cancha - ${booking.date} ${booking.time}`;
-          
           const url = await createPreference(title, finalPrice);
           setQrUrl(url);
           setIsLoadingQr(false);
@@ -79,26 +73,16 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
   const handlePaymentSelect = (e: React.MouseEvent, booking: Booking, method?: PaymentMethod) => {
       e.stopPropagation(); 
       setActiveDropdownId(null); 
-
       if (!method) {
-          // Marcar como impago
           onUpdateBooking({ ...booking, paymentMethod: undefined });
           return;
       }
-
-      // Abrimos el modal para todos los métodos (incluido Efectivo) para confirmar
       openPaymentModal(booking, method);
   };
 
   const handleConfirmPayment = () => {
       if (!paymentModal.booking || !paymentModal.type) return;
-      
-      const updated = { 
-          ...paymentModal.booking, 
-          paymentMethod: paymentModal.type,
-          status: BookingStatus.CONFIRMED 
-      };
-      
+      const updated = { ...paymentModal.booking, paymentMethod: paymentModal.type, status: BookingStatus.CONFIRMED };
       onUpdateBooking(updated);
       setPaymentModal({ isOpen: false, type: null, booking: null });
   };
@@ -111,8 +95,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
       }
       setIsFormModalOpen(false);
       setEditingBooking(null);
-
-      // Si se crea con un método de pago, abrir el modal para cobrar
       if (booking.paymentMethod) {
           openPaymentModal(booking, booking.paymentMethod);
       }
@@ -127,39 +109,23 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
       }
   };
 
-  const getFinalPrice = () => {
-      if (!paymentModal.booking || !paymentModal.type) return 0;
-      const basePrice = paymentModal.booking.price;
-      if (paymentModal.type === PaymentMethod.QR) {
-          const fee = config.mpFeePercentage || 0;
-          return basePrice * (1 + fee / 100);
-      }
-      return basePrice;
-  };
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 h-full flex flex-col max-w-3xl mx-auto" onClick={() => setActiveDropdownId(null)}>
       
-      {/* Barra de Control */}
       <div className="bg-slate-900/90 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg flex flex-col sm:flex-row justify-between items-center gap-4 sticky top-0 z-30">
         <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-lg border border-white/5 w-full sm:w-auto">
              <button onClick={() => handleDateChange(-1)} className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"><ChevronLeft size={20}/></button>
              <div className="flex-1 text-center px-6">
                  <div className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-0.5">Viendo reservas del</div>
-                 <div className="relative">
-                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent text-white font-bold text-lg text-center outline-none w-full cursor-pointer appearance-none z-10 relative" />
-                 </div>
+                 <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent text-white font-bold text-lg text-center outline-none w-full cursor-pointer appearance-none" />
              </div>
              <button onClick={() => handleDateChange(1)} className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"><ChevronRight size={20}/></button>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
-             <button onClick={() => { setEditingBooking(null); setIsFormModalOpen(true); }} className={`flex-1 sm:flex-none ${theme.primary} hover:opacity-90 text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95`}>
-                <Plus size={20} /> <span>Nuevo Turno</span>
-            </button>
-        </div>
+        <button onClick={() => { setEditingBooking(null); setIsFormModalOpen(true); }} className={`${theme.primary} hover:opacity-90 text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 w-full sm:w-auto`}>
+            <Plus size={20} /> <span>Nuevo Turno</span>
+        </button>
       </div>
 
-      {/* Lista de Turnos */}
       <div className="flex-1 space-y-4 relative z-0">
           {dailyBookings.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-slate-500 border border-dashed border-white/10 rounded-2xl bg-white/5">
@@ -171,37 +137,36 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
               dailyBookings.map((booking) => {
                   const court = courts.find(c => c.id === booking.courtId);
                   const isConfirmed = booking.status === BookingStatus.CONFIRMED;
-                  const hasPayment = !!booking.paymentMethod;
                   const isDropdownActive = activeDropdownId === booking.id;
 
                   return (
-                      <div key={booking.id} onClick={() => setSelectedBooking(booking)} className={`relative group rounded-2xl border transition-all cursor-pointer shadow-md ${isConfirmed ? 'bg-slate-800 border-l-4 border-l-green-500 border-y-white/5 border-r-white/5' : 'bg-slate-800 border-l-4 border-l-yellow-500 border-y-white/5 border-r-white/5'} ${isDropdownActive ? 'z-50 ring-2 ring-blue-500/50' : 'z-0 hover:scale-[1.01] active:scale-[0.99]'}`}>
+                      <div key={booking.id} onClick={() => setSelectedBooking(booking)} className={`relative rounded-2xl border transition-all cursor-pointer shadow-md bg-slate-800 border-l-4 ${isConfirmed ? 'border-l-green-500' : 'border-l-yellow-500'} border-y-white/5 border-r-white/5 hover:scale-[1.01]`}>
                           <div className="flex items-stretch">
-                              <div className="w-20 sm:w-24 bg-slate-900/50 flex flex-col items-center justify-center p-2 sm:p-4 border-r border-white/5 rounded-l-2xl">
-                                  <span className="text-xl sm:text-2xl font-bold text-white tracking-tight">{booking.time}</span>
-                                  <span className="text-[10px] sm:text-xs text-slate-500 mt-1 font-medium">{booking.duration} min</span>
+                              <div className="w-20 sm:w-24 bg-slate-900/50 flex flex-col items-center justify-center p-2 border-r border-white/5 rounded-l-2xl">
+                                  <span className="text-xl font-bold text-white tracking-tight">{booking.time}</span>
+                                  <span className="text-[10px] text-slate-500 mt-1 font-medium">{booking.duration} min</span>
                               </div>
                               <div className="flex-1 p-3 sm:p-4 flex flex-col justify-center min-w-0">
-                                  <div className="flex justify-between items-start mb-1"><h3 className="text-base sm:text-lg font-bold text-white truncate pr-2">{booking.customerName}</h3></div>
-                                  <div className="flex items-center gap-3 text-sm text-slate-400 mb-1"><span className="flex items-center gap-1.5 text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded-md text-xs font-bold uppercase tracking-wide"><MapPin size={10} /> {court?.name || 'Cancha ?'}</span></div>
-                                  <div className="flex items-center gap-3 mt-1 sm:mt-2"><span className="font-mono text-slate-300 font-bold bg-white/5 px-2 py-0.5 rounded text-xs border border-white/5">{formatMoney(booking.price)}</span>{booking.isRecurring && (<span className="flex items-center gap-1 text-[10px] text-blue-400 font-bold uppercase border border-blue-500/20 px-1.5 py-0.5 rounded-full"><RefreshCw size={10}/> Fijo</span>)}</div>
+                                  <h3 className="text-base sm:text-lg font-bold text-white truncate mb-1">{booking.customerName}</h3>
+                                  <div className="flex items-center gap-3 text-sm text-slate-400">
+                                      <span className="flex items-center gap-1.5 text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded-md text-xs font-bold uppercase"><MapPin size={10} /> {court?.name || 'Cancha ?'}</span>
+                                  </div>
                               </div>
-                              <div className="flex flex-col items-end justify-center p-3 sm:p-4 gap-2 border-l border-white/5 bg-white/[0.02] min-w-[140px] rounded-r-2xl relative">
-                                  {/* BOTÓN DESPLEGABLE */}
+                              <div className="flex flex-col items-end justify-center p-3 gap-2 border-l border-white/5 bg-white/[0.02] min-w-[140px] rounded-r-2xl">
                                   <div className="relative w-full">
-                                      <button onClick={(e) => { e.stopPropagation(); setActiveDropdownId(isDropdownActive ? null : booking.id); }} className={`w-full px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-between gap-1 transition-colors border ${hasPayment ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20' : 'bg-slate-700/30 text-slate-400 border-white/5 hover:bg-slate-700/50'}`}>
-                                          <div className="flex items-center gap-2 truncate">{getPaymentIcon(booking.paymentMethod)}<span className="truncate">{booking.paymentMethod || 'Cobrar'}</span></div><ChevronDown size={12} className={`transition-transform duration-200 ${isDropdownActive ? 'rotate-180' : ''}`}/>
+                                      <button onClick={(e) => { e.stopPropagation(); setActiveDropdownId(isDropdownActive ? null : booking.id); }} className={`w-full px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-between border ${booking.paymentMethod ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-slate-700/30 text-slate-400 border-white/5'}`}>
+                                          <div className="flex items-center gap-2 truncate">{getPaymentIcon(booking.paymentMethod)} {booking.paymentMethod || 'Cobrar'}</div><ChevronDown size={12}/>
                                       </button>
                                       {isDropdownActive && (
-                                          <div className="absolute right-0 top-full mt-2 w-48 bg-slate-900 border border-white/10 rounded-xl shadow-2xl z-[60] overflow-hidden flex flex-col p-1 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
-                                              <button onClick={(e) => handlePaymentSelect(e, booking, PaymentMethod.CASH)} className="flex items-center gap-2 px-3 py-2.5 text-xs text-green-400 hover:bg-white/5 rounded-lg transition-colors text-left font-bold border-b border-white/5"><Banknote size={14}/> Efectivo</button>
-                                              <button onClick={(e) => handlePaymentSelect(e, booking, PaymentMethod.QR)} className="flex items-center gap-2 px-3 py-2.5 text-xs text-blue-400 hover:bg-white/5 rounded-lg transition-colors text-left font-bold border-b border-white/5"><QrCode size={14}/> QR Mercado Pago</button>
-                                              <button onClick={(e) => handlePaymentSelect(e, booking, PaymentMethod.TRANSFER)} className="flex items-center gap-2 px-3 py-2.5 text-xs text-purple-400 hover:bg-white/5 rounded-lg transition-colors text-left font-bold border-b border-white/5"><CreditCard size={14}/> Transferencia</button>
-                                              <button onClick={(e) => handlePaymentSelect(e, booking, undefined)} className="flex items-center gap-2 px-3 py-2.5 text-xs text-red-400 hover:bg-white/5 rounded-lg transition-colors text-left font-medium"><X size={14}/> Marcar Impago</button>
+                                          <div className="absolute right-0 top-full mt-2 w-48 bg-slate-900 border border-white/10 rounded-xl shadow-2xl z-[60] p-1 flex flex-col">
+                                              <button onClick={(e) => handlePaymentSelect(e, booking, PaymentMethod.CASH)} className="flex items-center gap-2 px-3 py-2.5 text-xs text-green-400 hover:bg-white/5 rounded-lg text-left font-bold border-b border-white/5"><Banknote size={14}/> Efectivo</button>
+                                              <button onClick={(e) => handlePaymentSelect(e, booking, PaymentMethod.QR)} className="flex items-center gap-2 px-3 py-2.5 text-xs text-blue-400 hover:bg-white/5 rounded-lg text-left font-bold border-b border-white/5"><QrCode size={14}/> QR Mercado Pago</button>
+                                              <button onClick={(e) => handlePaymentSelect(e, booking, PaymentMethod.TRANSFER)} className="flex items-center gap-2 px-3 py-2.5 text-xs text-purple-400 hover:bg-white/5 rounded-lg text-left font-bold border-b border-white/5"><CreditCard size={14}/> Transferencia</button>
+                                              <button onClick={(e) => handlePaymentSelect(e, booking, undefined)} className="flex items-center gap-2 px-3 py-2.5 text-xs text-red-400 hover:bg-white/5 rounded-lg text-left font-medium"><X size={14}/> Marcar Impago</button>
                                           </div>
                                       )}
                                   </div>
-                                  <span className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center justify-center gap-1.5 w-full text-center ${isConfirmed ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>{isConfirmed ? <Check size={12}/> : <Clock size={12}/>}{isConfirmed ? 'OK' : 'Pend.'}</span>
+                                  <span className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center justify-center gap-1.5 w-full ${isConfirmed ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>{isConfirmed ? <Check size={12}/> : <Clock size={12}/>}{isConfirmed ? 'OK' : 'Pend.'}</span>
                               </div>
                           </div>
                       </div>
@@ -211,82 +176,75 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
       </div>
 
       {isFormModalOpen && (
-          <BookingFormModal isOpen={isFormModalOpen} onClose={() => { setIsFormModalOpen(false); setEditingBooking(null); }} courts={courts} onSave={handleFormSave} initialDate={selectedDate} initialTime={'18:00'} editingBooking={editingBooking} />
+          <BookingFormModal 
+            isOpen={isFormModalOpen} 
+            onClose={() => { setIsFormModalOpen(false); setEditingBooking(null); }} 
+            courts={courts} 
+            onSave={handleFormSave} 
+            initialDate={selectedDate} 
+            initialTime={'18:00'} 
+            editingBooking={editingBooking}
+            allBookings={bookings}
+          />
       )}
 
       {selectedBooking && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
               <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative">
-                  {/* HEADER CON BOTONES ALINEADOS */}
-                  <div className="mb-6 border-b border-white/10 pb-4">
-                      <div className="flex justify-between items-start">
-                          <div><h3 className="text-xl font-bold text-white mb-1">Detalle del Turno</h3><div className="flex items-center gap-2 text-sm text-slate-400"><CalendarDays size={14}/> {selectedBooking.date}<Clock size={14}/> {selectedBooking.time}</div></div>
-                          <div className="flex gap-2"><button onClick={() => handleEditClick(selectedBooking)} className="p-2 bg-slate-800 rounded-lg text-blue-400 hover:bg-slate-700 hover:text-white transition-colors"><Edit2 size={18} /></button><button onClick={() => setSelectedBooking(null)} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"><X size={18}/></button></div>
-                      </div>
-                      <div className="mt-3 text-sm text-blue-400 font-bold flex items-center gap-1"><MapPin size={14}/> {courts.find(c => c.id === selectedBooking.courtId)?.name}</div>
+                  <div className="mb-6 border-b border-white/10 pb-4 flex justify-between items-start">
+                      <div><h3 className="text-xl font-bold text-white mb-1">Turno #{selectedBooking.id.slice(-4)}</h3><div className="flex items-center gap-2 text-sm text-slate-400"><CalendarDays size={14}/> {selectedBooking.date}<Clock size={14}/> {selectedBooking.time}</div></div>
+                      <div className="flex gap-2"><button onClick={() => handleEditClick(selectedBooking)} className="p-2 bg-slate-800 rounded-lg text-blue-400"><Edit2 size={18} /></button><button onClick={() => setSelectedBooking(null)} className="p-2 bg-slate-800 rounded-lg text-slate-400"><X size={18}/></button></div>
                   </div>
-
                   <div className="space-y-4 mb-6">
-                      <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-white/5">
+                      <div className="p-3 bg-slate-800/50 rounded-lg border border-white/5 flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-300"><User size={20}/></div>
                           <div><div className="font-bold text-white">{selectedBooking.customerName}</div><div className="text-xs text-slate-400">{selectedBooking.customerPhone || 'Sin teléfono'}</div></div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 bg-slate-800/50 rounded-lg border border-white/5"><span className="text-slate-400 text-xs block mb-1">Estado</span><span className={`px-2 py-0.5 rounded text-xs font-bold inline-block ${selectedBooking.status === BookingStatus.CONFIRMED ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{selectedBooking.status}</span></div>
+                        <div className="p-3 bg-slate-800/50 rounded-lg border border-white/5"><span className="text-slate-400 text-xs block mb-1">Cancha</span><span className="text-white font-bold text-sm">{courts.find(c => c.id === selectedBooking.courtId)?.name}</span></div>
                         <div className="p-3 bg-slate-800/50 rounded-lg border border-white/5"><span className="text-slate-400 text-xs block mb-1">Precio</span><span className="font-mono font-bold text-white text-sm">{formatMoney(selectedBooking.price)}</span></div>
                       </div>
-                      <div className="p-3 bg-slate-800/50 rounded-lg border border-white/5 flex items-center justify-between"><span className="text-slate-400 text-xs">Pago con</span><span className="text-sm font-bold text-white flex items-center gap-2">{getPaymentIcon(selectedBooking.paymentMethod)} {selectedBooking.paymentMethod || 'No registrado'}</span></div>
                   </div>
                   <div className="space-y-3">
                        {selectedBooking.status === BookingStatus.PENDING && (
-                           <button onClick={() => { onUpdateStatus(selectedBooking.id, BookingStatus.CONFIRMED); setSelectedBooking(null); }} className="w-full bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-green-500/20 flex items-center justify-center gap-2"><Check size={18}/> Confirmar Turno</button>
+                           <button onClick={() => { onUpdateStatus(selectedBooking.id, BookingStatus.CONFIRMED); setSelectedBooking(null); }} className="w-full bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Check size={18}/> Confirmar Turno</button>
                        )}
                        <div className="grid grid-cols-2 gap-2">
-                           <button onClick={() => handleNotify(selectedBooking)} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-xl font-bold text-sm border border-white/5"><MessageCircle size={16}/> WhatsApp</button>
-                           <button onClick={() => { onToggleRecurring(selectedBooking.id); setSelectedBooking(null); }} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-xl font-bold text-sm border border-white/5"><RefreshCw size={16}/> {selectedBooking.isRecurring ? 'Quitar Fijo' : 'Hacer Fijo'}</button>
+                           <button onClick={() => handleNotify(selectedBooking)} className="flex items-center justify-center gap-2 bg-slate-800 text-white py-3 rounded-xl font-bold text-sm"><MessageCircle size={16}/> WhatsApp</button>
+                           <button onClick={() => { onToggleRecurring(selectedBooking.id); setSelectedBooking(null); }} className="flex items-center justify-center gap-2 bg-slate-800 text-white py-3 rounded-xl font-bold text-sm"><RefreshCw size={16}/> {selectedBooking.isRecurring ? 'Quitar Fijo' : 'Hacer Fijo'}</button>
                        </div>
-                       <button onClick={() => { if(window.confirm('¿Seguro que deseas eliminar esta reserva?')) { onUpdateStatus(selectedBooking.id, BookingStatus.CANCELLED); setSelectedBooking(null); } }} className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"><Trash2 size={16}/> Eliminar Reserva</button>
+                       <button onClick={() => { if(window.confirm('¿Eliminar esta reserva?')) { onUpdateStatus(selectedBooking.id, BookingStatus.CANCELLED); setSelectedBooking(null); } }} className="w-full bg-red-500/10 text-red-400 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"><Trash2 size={16}/> Eliminar Reserva</button>
                   </div>
               </div>
           </div>
       )}
 
-      {/* --- MODAL DE PAGO UNIFICADO --- */}
       {paymentModal.isOpen && paymentModal.booking && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
               <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative">
                   <button onClick={() => setPaymentModal({ ...paymentModal, isOpen: false })} className="absolute right-4 top-4 text-slate-400 hover:text-white"><X size={20}/></button>
                   <div className="text-center mb-6">
-                      <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg border border-white/5 ${paymentModal.type === PaymentMethod.CASH ? 'bg-green-500/20 text-green-500 border-green-500/30' : ''} ${paymentModal.type === PaymentMethod.QR ? 'bg-blue-500/20 text-blue-500 border-blue-500/30' : ''} ${paymentModal.type === PaymentMethod.TRANSFER ? 'bg-purple-500/20 text-purple-500 border-purple-500/30' : ''}`}>
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg border border-white/5 ${paymentModal.type === PaymentMethod.CASH ? 'bg-green-500/20 text-green-500 border-green-500/30' : paymentModal.type === PaymentMethod.QR ? 'bg-blue-500/20 text-blue-500 border-blue-500/30' : 'bg-purple-500/20 text-purple-500 border-purple-500/30'}`}>
                           {paymentModal.type === PaymentMethod.CASH && <Banknote size={32}/>}
                           {paymentModal.type === PaymentMethod.QR && <QrCode size={32}/>}
                           {paymentModal.type === PaymentMethod.TRANSFER && <CreditCard size={32}/>}
                       </div>
                       <h3 className="text-xl font-bold text-white mb-1">
-                          {paymentModal.type === PaymentMethod.CASH && 'Confirmar Pago Efectivo'}
-                          {paymentModal.type === PaymentMethod.QR && 'Cobro con QR'}
-                          {paymentModal.type === PaymentMethod.TRANSFER && 'Transferencia'}
+                          {paymentModal.type === PaymentMethod.CASH ? 'Pago Efectivo' : paymentModal.type === PaymentMethod.QR ? 'Cobro QR' : 'Transferencia'}
                       </h3>
-                      {paymentModal.type === PaymentMethod.QR && (config.mpFeePercentage || 0) > 0 && (<div className="text-xs text-orange-400 mb-2 font-bold bg-orange-500/10 px-2 py-1 rounded inline-block border border-orange-500/20">Recargo: {config.mpFeePercentage}% aplicado</div>)}
-                      <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 mt-4"><p className="text-slate-400 text-sm mb-1">Total a cobrar</p><span className="text-white font-bold text-2xl block">{formatMoney(getFinalPrice())}</span></div>
+                      <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 mt-4"><p className="text-slate-400 text-sm mb-1">Total a cobrar</p><span className="text-white font-bold text-2xl block">{formatMoney(paymentModal.type === PaymentMethod.QR ? paymentModal.booking.price * (1 + (config.mpFeePercentage || 0) / 100) : paymentModal.booking.price)}</span></div>
                   </div>
-
-                  {paymentModal.type === PaymentMethod.CASH && (<p className="text-slate-300 text-sm text-center mb-6">¿Confirmas que has recibido el dinero total en caja?</p>)}
-
                   {paymentModal.type === PaymentMethod.QR && (
-                      <div className="bg-white p-4 rounded-xl mb-6 mx-auto w-fit shadow-inner min-h-[230px] flex flex-col items-center justify-center">
-                          {isLoadingQr ? (<div className="flex flex-col items-center animate-pulse"><Loader2 className="animate-spin text-blue-500 mb-2" size={32}/><span className="text-xs text-slate-500 font-bold">Generando QR...</span></div>) : qrUrl ? (<><img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}`} alt="QR de Pago" className="w-48 h-48 object-contain"/><p className="text-black/50 text-[10px] text-center mt-2 font-mono">Escanea con Mercado Pago</p></>) : (<p className="text-red-500 text-xs font-bold text-center p-4">Error al conectar con MP.<br/>Verifica tu Token.</p>)}
+                      <div className="bg-white p-4 rounded-xl mb-6 mx-auto w-fit shadow-inner flex flex-col items-center justify-center">
+                          {isLoadingQr ? (<div className="flex flex-col items-center p-8"><Loader2 className="animate-spin text-blue-500 mb-2" size={32}/><span className="text-xs text-slate-500 font-bold">Generando QR...</span></div>) : qrUrl ? (<><img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}`} alt="QR" className="w-48 h-48"/><p className="text-black/50 text-[10px] mt-2 font-mono">Escanea con Mercado Pago</p></>) : (<p className="text-red-500 text-xs font-bold p-4">Error de conexión con MP.</p>)}
                       </div>
                   )}
-
                   {paymentModal.type === PaymentMethod.TRANSFER && (
                       <div className="space-y-4 mb-6">
-                          <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 text-center"><p className="text-xs text-slate-500 uppercase font-bold mb-1">Alias / CBU</p><div className="flex items-center justify-center gap-2"><span className="text-xl font-mono text-white font-bold tracking-wider select-all">{config.mpAlias || 'SIN ALIAS'}</span><button onClick={() => navigator.clipboard.writeText(config.mpAlias || '')} className="text-slate-400 hover:text-white p-1" title="Copiar"><Copy size={14}/></button></div><p className="text-[10px] text-slate-500 mt-2">Pide el comprobante al cliente.</p></div>
-                          <button onClick={() => { const text = `Hola! Para confirmar tu turno de ${formatMoney(getFinalPrice())}, por favor transferí al alias: *${config.mpAlias}* y envianos el comprobante.`; window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank'); }} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"><Share2 size={18}/> Enviar Datos por WhatsApp</button>
+                          <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 text-center"><p className="text-xs text-slate-500 uppercase font-bold mb-1">Alias / CBU</p><span className="text-xl font-mono text-white font-bold tracking-wider select-all">{config.mpAlias || 'SIN ALIAS'}</span></div>
                       </div>
                   )}
-
-                  <button onClick={handleConfirmPayment} className={`w-full font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 ${paymentModal.type === PaymentMethod.CASH ? 'bg-green-600 hover:bg-green-500 text-white shadow-green-500/20' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/20'}`}><CheckCircle size={20}/> {paymentModal.type === PaymentMethod.CASH ? 'Sí, Dinero Recibido' : 'Confirmar Cobro Realizado'}</button>
+                  <button onClick={handleConfirmPayment} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2"><CheckCircle size={20}/> Confirmar Cobro Realizado</button>
               </div>
           </div>
       )}
@@ -294,25 +252,96 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
   );
 };
 
-const BookingFormModal = ({ isOpen, onClose, courts, onSave, initialDate, initialTime, editingBooking }: any) => {
+const BookingFormModal = ({ isOpen, onClose, courts, onSave, initialDate, initialTime, editingBooking, allBookings }: any) => {
     const isEditMode = !!editingBooking;
     const defaultCourt = courts[0];
-    const [form, setForm] = useState<Partial<Booking>>(isEditMode ? { ...editingBooking } : { customerName: '', customerPhone: '', date: initialDate, time: initialTime || '18:00', duration: 90, price: defaultCourt ? defaultCourt.basePrice : 0, courtId: defaultCourt ? defaultCourt.id : '', status: BookingStatus.PENDING, isRecurring: false, paymentMethod: undefined });
-    const selectedCourt = courts.find((c: Court) => c.id === form.courtId);
-    const handleCourtChange = (courtId: string) => { const court = courts.find((c: Court) => c.id === courtId); setForm({ ...form, courtId, price: court ? court.basePrice : 0 }); };
-    const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); const bookingToSave: Booking = { ...form as Booking, id: isEditMode ? form.id : `b${Date.now()}` }; onSave(bookingToSave); };
+    
+    const [form, setForm] = useState<Partial<Booking>>(isEditMode ? { ...editingBooking } : { 
+        customerName: '', customerPhone: '', date: initialDate, time: initialTime || '18:00', duration: 90, 
+        price: defaultCourt ? defaultCourt.basePrice : 0, courtId: defaultCourt ? defaultCourt.id : '', 
+        status: BookingStatus.PENDING, isRecurring: false, paymentMethod: undefined 
+    });
+
+    const updatePrice = (courtId: string, duration: number) => {
+        const court = courts.find((c: any) => c.id === courtId);
+        if (court) {
+            // El basePrice es para 90 minutos (3 turnos de 30)
+            const calculated = Math.round((court.basePrice / 90) * duration);
+            setForm(prev => ({ ...prev, courtId, duration, price: calculated }));
+        }
+    };
+
+    const handleCourtChange = (courtId: string) => updatePrice(courtId, form.duration || 90);
+    const handleDurationChange = (duration: number) => updatePrice(form.courtId || '', duration);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        // VALIDACIÓN DE SOLAPAMIENTO
+        const newStart = new Date(`${form.date}T${form.time}`).getTime();
+        const newEnd = newStart + (form.duration || 0) * 60000;
+
+        const hasConflict = allBookings.some((b: Booking) => {
+            if (b.status === BookingStatus.CANCELLED) return false;
+            if (b.courtId !== form.courtId) return false;
+            if (b.id === form.id) return false;
+
+            const bStart = new Date(`${b.date}T${b.time}`).getTime();
+            const bEnd = bStart + b.duration * 60000;
+
+            // Lógica de colisión: (NuevoInicio < ExistenteFin) && (ExistenteInicio < NuevoFin)
+            return newStart < bEnd && bStart < newEnd;
+        });
+
+        if (hasConflict) {
+            alert("⚠️ ERROR: La cancha ya está reservada en ese horario. Por favor revisa la agenda o elige otra cancha.");
+            return;
+        }
+
+        const bookingToSave: Booking = { ...form as Booking, id: isEditMode ? form.id : `b${Date.now()}` }; 
+        onSave(bookingToSave); 
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="p-4 border-b border-white/10 flex justify-between items-center bg-slate-900/50"><h3 className="text-lg font-bold text-white flex items-center gap-2">{isEditMode ? <Edit2 size={20} className="text-blue-400"/> : <Plus size={20} className="text-blue-400"/>} {isEditMode ? 'Editar Turno' : 'Nuevo Turno'}</h3><button onClick={onClose} className="text-slate-400 hover:text-white bg-white/5 p-1 rounded-full"><X size={20}/></button></div>
+                <div className="p-4 border-b border-white/10 flex justify-between items-center bg-slate-900/50">
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">{isEditMode ? <Edit2 size={20} className="text-blue-400"/> : <Plus size={20} className="text-blue-400"/>} {isEditMode ? 'Editar Turno' : 'Nuevo Turno'}</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white bg-white/5 p-1 rounded-full"><X size={20}/></button>
+                </div>
                 <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
-                    <div className="grid grid-cols-2 gap-4"><div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" required value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/></div><div><label className="text-xs text-slate-400 block mb-1">Hora</label><input type="time" required value={form.time} onChange={e => setForm({...form, time: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/></div></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Cancha</label><select value={form.courtId} onChange={e => handleCourtChange(e.target.value)} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white">{courts.map((c: Court) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                    <div className="space-y-3"><h4 className="text-xs font-bold text-slate-500 uppercase">Datos del Cliente</h4><div><input type="text" required placeholder="Nombre Completo" value={form.customerName} onChange={e => setForm({...form, customerName: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/></div><div><input type="tel" placeholder="Teléfono (Opcional)" value={form.customerPhone} onChange={e => setForm({...form, customerPhone: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/></div></div>
-                     <div className="grid grid-cols-2 gap-4 pt-2"><div><label className="text-xs text-slate-400 block mb-1">Precio Final</label><div className="relative"><span className="absolute left-3 top-2.5 text-slate-500">$</span><input type="number" required value={form.price} onChange={e => setForm({...form, price: parseFloat(e.target.value)})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-2.5 pl-6 text-white font-mono font-bold"/></div></div><div><label className="text-xs text-slate-400 block mb-1">Forma de Pago</label><select value={form.paymentMethod || ''} onChange={e => setForm({...form, paymentMethod: e.target.value as PaymentMethod})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-2.5 text-white"><option value="">Seleccionar...</option><option value={PaymentMethod.CASH}>Efectivo</option><option value={PaymentMethod.QR}>QR Mercado Pago</option><option value={PaymentMethod.TRANSFER}>Transferencia</option></select></div></div>
-                    <div className="flex items-center gap-2 bg-slate-800 p-2.5 rounded-lg border border-white/10 w-full cursor-pointer hover:bg-slate-700 mt-2"><input type="checkbox" checked={form.isRecurring} onChange={e => setForm({...form, isRecurring: e.target.checked})} className="rounded bg-slate-900 border-white/20"/><span className="text-sm text-slate-300">Es Fijo Semanal</span></div>
-                    <div className="pt-2"><button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center justify-center gap-2"><Save size={18} /> {isEditMode ? 'Guardar Cambios' : 'Crear Turno'}</button></div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-xs text-slate-400 block mb-1">Fecha</label><input type="date" required value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/></div>
+                        <div><label className="text-xs text-slate-400 block mb-1">Hora Inicio</label><input type="time" required value={form.time} onChange={e => setForm({...form, time: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-xs text-slate-400 block mb-1">Cancha</label><select value={form.courtId} onChange={e => handleCourtChange(e.target.value)} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white">{courts.map((c: Court) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                        <div>
+                            <label className="text-xs text-slate-400 block mb-1">Duración</label>
+                            <select value={form.duration} onChange={e => handleDurationChange(parseInt(e.target.value))} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white">
+                                <option value={30}>30 min</option>
+                                <option value={60}>60 min (1h)</option>
+                                <option value={90}>90 min (1.5h)</option>
+                                <option value={120}>120 min (2h)</option>
+                                <option value={150}>150 min (2.5h)</option>
+                                <option value={180}>180 min (3h)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase border-b border-white/5 pb-1">Datos del Cliente</h4>
+                        <input type="text" required placeholder="Nombre Completo" value={form.customerName} onChange={e => setForm({...form, customerName: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/>
+                        <input type="tel" placeholder="Teléfono" value={form.customerPhone} onChange={e => setForm({...form, customerPhone: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 pt-2">
+                        <div><label className="text-xs text-slate-400 block mb-1">Precio Final ($)</label><input type="number" required value={form.price} onChange={e => setForm({...form, price: parseFloat(e.target.value)})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white font-mono font-bold"/></div>
+                        <div><label className="text-xs text-slate-400 block mb-1">Fijo</label><div className="flex items-center gap-2 bg-slate-800 p-3 rounded-lg border border-white/10 h-[48px]"><input type="checkbox" checked={form.isRecurring} onChange={e => setForm({...form, isRecurring: e.target.checked})} className="rounded bg-slate-900 border-white/20"/><span className="text-sm text-slate-300">Semanal</span></div></div>
+                    </div>
+
+                    <div className="pt-4"><button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={20} /> {isEditMode ? 'Guardar Cambios' : 'Crear Turno'}</button></div>
                 </form>
             </div>
         </div>
