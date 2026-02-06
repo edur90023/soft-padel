@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, Check, X, RefreshCw, Plus, CalendarDays, MapPin, Edit2, Trash2, Banknote, QrCode, CreditCard, Save, AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Copy, Share2, User, MessageCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { Booking, BookingStatus, ClubConfig, Court, PaymentMethod } from '../types';
 import { COLOR_THEMES } from '../constants';
@@ -95,9 +95,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
       }
       setIsFormModalOpen(false);
       setEditingBooking(null);
-      if (booking.paymentMethod) {
-          openPaymentModal(booking, booking.paymentMethod);
-      }
   };
 
   const getPaymentIcon = (method?: PaymentMethod) => {
@@ -234,16 +231,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
                       </h3>
                       <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 mt-4"><p className="text-slate-400 text-sm mb-1">Total a cobrar</p><span className="text-white font-bold text-2xl block">{formatMoney(paymentModal.type === PaymentMethod.QR ? paymentModal.booking.price * (1 + (config.mpFeePercentage || 0) / 100) : paymentModal.booking.price)}</span></div>
                   </div>
-                  {paymentModal.type === PaymentMethod.QR && (
-                      <div className="bg-white p-4 rounded-xl mb-6 mx-auto w-fit shadow-inner flex flex-col items-center justify-center">
-                          {isLoadingQr ? (<div className="flex flex-col items-center p-8"><Loader2 className="animate-spin text-blue-500 mb-2" size={32}/><span className="text-xs text-slate-500 font-bold">Generando QR...</span></div>) : qrUrl ? (<><img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}`} alt="QR" className="w-48 h-48"/><p className="text-black/50 text-[10px] mt-2 font-mono">Escanea con Mercado Pago</p></>) : (<p className="text-red-500 text-xs font-bold p-4">Error de conexión con MP.</p>)}
-                      </div>
-                  )}
-                  {paymentModal.type === PaymentMethod.TRANSFER && (
-                      <div className="space-y-4 mb-6">
-                          <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 text-center"><p className="text-xs text-slate-500 uppercase font-bold mb-1">Alias / CBU</p><span className="text-xl font-mono text-white font-bold tracking-wider select-all">{config.mpAlias || 'SIN ALIAS'}</span></div>
-                      </div>
-                  )}
                   <button onClick={handleConfirmPayment} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2"><CheckCircle size={20}/> Confirmar Cobro Realizado</button>
               </div>
           </div>
@@ -254,59 +241,49 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
 
 const BookingFormModal = ({ isOpen, onClose, courts, onSave, initialDate, initialTime, editingBooking, allBookings }: any) => {
     const isEditMode = !!editingBooking;
-    const defaultCourt = courts[0];
-    
     const [form, setForm] = useState<Partial<Booking>>(isEditMode ? { ...editingBooking } : { 
         customerName: '', customerPhone: '', date: initialDate, time: initialTime || '18:00', duration: 90, 
-        price: defaultCourt ? defaultCourt.basePrice : 0, courtId: defaultCourt ? defaultCourt.id : '', 
-        status: BookingStatus.PENDING, isRecurring: false, paymentMethod: undefined 
+        price: 0, courtId: '', status: BookingStatus.PENDING, isRecurring: false, paymentMethod: undefined 
     });
+
+    const checkAvailability = (courtId: string, date: string, time: string, duration: number) => {
+        if (!courtId || !date || !time) return true;
+        const newStart = new Date(`${date}T${time}`).getTime();
+        const newEnd = newStart + duration * 60000;
+
+        return !allBookings.some((b: Booking) => {
+            if (b.status === BookingStatus.CANCELLED || b.courtId !== courtId) return false;
+            if (isEditMode && b.id === editingBooking.id) return false;
+            const bStart = new Date(`${b.date}T${b.time}`).getTime();
+            const bEnd = bStart + b.duration * 60000;
+            return newStart < bEnd && bStart < newEnd;
+        });
+    };
 
     const updatePrice = (courtId: string, duration: number) => {
         const court = courts.find((c: any) => c.id === courtId);
         if (court) {
-            // El basePrice es para 90 minutos (3 turnos de 30)
             const calculated = Math.round((court.basePrice / 90) * duration);
             setForm(prev => ({ ...prev, courtId, duration, price: calculated }));
+        } else {
+            setForm(prev => ({ ...prev, courtId, duration }));
         }
     };
-
-    const handleCourtChange = (courtId: string) => updatePrice(courtId, form.duration || 90);
-    const handleDurationChange = (duration: number) => updatePrice(form.courtId || '', duration);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-
-        // VALIDACIÓN DE SOLAPAMIENTO
-        const newStart = new Date(`${form.date}T${form.time}`).getTime();
-        const newEnd = newStart + (form.duration || 0) * 60000;
-
-        const hasConflict = allBookings.some((b: Booking) => {
-            if (b.status === BookingStatus.CANCELLED) return false;
-            if (b.courtId !== form.courtId) return false;
-            if (b.id === form.id) return false;
-
-            const bStart = new Date(`${b.date}T${b.time}`).getTime();
-            const bEnd = bStart + b.duration * 60000;
-
-            // Lógica de colisión: (NuevoInicio < ExistenteFin) && (ExistenteInicio < NuevoFin)
-            return newStart < bEnd && bStart < newEnd;
-        });
-
-        if (hasConflict) {
-            alert("⚠️ ERROR: La cancha ya está reservada en ese horario. Por favor revisa la agenda o elige otra cancha.");
-            return;
+        if (!form.courtId) return alert("Por favor selecciona una cancha disponible.");
+        if (!checkAvailability(form.courtId, form.date!, form.time!, form.duration!)) {
+            return alert("⚠️ ERROR: El horario ya no está disponible para esta cancha.");
         }
-
-        const bookingToSave: Booking = { ...form as Booking, id: isEditMode ? form.id : `b${Date.now()}` }; 
-        onSave(bookingToSave); 
+        onSave({ ...form as Booking, id: isEditMode ? form.id : `b${Date.now()}` }); 
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]">
                 <div className="p-4 border-b border-white/10 flex justify-between items-center bg-slate-900/50">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">{isEditMode ? <Edit2 size={20} className="text-blue-400"/> : <Plus size={20} className="text-blue-400"/>} {isEditMode ? 'Editar Turno' : 'Nuevo Turno'}</h3>
+                    <h3 className="text-lg font-bold text-white">{isEditMode ? 'Editar Turno' : 'Nuevo Turno'}</h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-white bg-white/5 p-1 rounded-full"><X size={20}/></button>
                 </div>
                 <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
@@ -315,33 +292,41 @@ const BookingFormModal = ({ isOpen, onClose, courts, onSave, initialDate, initia
                         <div><label className="text-xs text-slate-400 block mb-1">Hora Inicio</label><input type="time" required value={form.time} onChange={e => setForm({...form, time: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/></div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="text-xs text-slate-400 block mb-1">Cancha</label><select value={form.courtId} onChange={e => handleCourtChange(e.target.value)} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white">{courts.map((c: Court) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                        <div>
-                            <label className="text-xs text-slate-400 block mb-1">Duración</label>
-                            <select value={form.duration} onChange={e => handleDurationChange(parseInt(e.target.value))} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white">
-                                <option value={30}>30 min</option>
-                                <option value={60}>60 min (1h)</option>
-                                <option value={90}>90 min (1.5h)</option>
-                                <option value={120}>120 min (2h)</option>
-                                <option value={150}>150 min (2.5h)</option>
-                                <option value={180}>180 min (3h)</option>
-                            </select>
+                    <div>
+                        <label className="text-xs text-slate-400 block mb-2">Duración</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {[30, 60, 90, 120, 150, 180].map(d => (
+                                <button key={d} type="button" onClick={() => updatePrice(form.courtId || '', d)} className={`py-2 rounded-lg text-xs font-bold border transition-all ${form.duration === d ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800 border-white/5 text-slate-400 hover:border-white/20'}`}>{d} min</button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-xs text-slate-400 block mb-2">Seleccionar Cancha</label>
+                        <div className="space-y-2">
+                            {courts.map(c => {
+                                const isAvailable = checkAvailability(c.id, form.date!, form.time!, form.duration!);
+                                return (
+                                    <button key={c.id} type="button" disabled={!isAvailable} onClick={() => updatePrice(c.id, form.duration || 90)} className={`w-full p-3 rounded-xl border flex items-center justify-between transition-all ${form.courtId === c.id ? 'bg-blue-600/20 border-blue-500 text-white' : isAvailable ? 'bg-slate-800 border-white/5 text-slate-300 hover:bg-slate-700' : 'bg-slate-900 border-transparent text-slate-600 opacity-50 cursor-not-allowed'}`}>
+                                        <div className="flex items-center gap-3"><div className={`w-2 h-2 rounded-full ${isAvailable ? 'bg-green-500' : 'bg-red-500'}`}></div><span className="font-bold text-sm">{c.name}</span></div>
+                                        <span className="text-[10px] font-bold uppercase">{isAvailable ? 'Disponible' : 'Ocupada'}</span>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 
                     <div className="space-y-3 pt-2">
-                        <h4 className="text-xs font-bold text-slate-500 uppercase border-b border-white/5 pb-1">Datos del Cliente</h4>
-                        <input type="text" required placeholder="Nombre Completo" value={form.customerName} onChange={e => setForm({...form, customerName: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/>
+                        <input type="text" required placeholder="Nombre del Cliente" value={form.customerName} onChange={e => setForm({...form, customerName: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/>
                         <input type="tel" placeholder="Teléfono" value={form.customerPhone} onChange={e => setForm({...form, customerPhone: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white"/>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 pt-2">
-                        <div><label className="text-xs text-slate-400 block mb-1">Precio Final ($)</label><input type="number" required value={form.price} onChange={e => setForm({...form, price: parseFloat(e.target.value)})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white font-mono font-bold"/></div>
-                        <div><label className="text-xs text-slate-400 block mb-1">Fijo</label><div className="flex items-center gap-2 bg-slate-800 p-3 rounded-lg border border-white/10 h-[48px]"><input type="checkbox" checked={form.isRecurring} onChange={e => setForm({...form, isRecurring: e.target.checked})} className="rounded bg-slate-900 border-white/20"/><span className="text-sm text-slate-300">Semanal</span></div></div>
+                        <div><label className="text-xs text-slate-400 block mb-1">Precio Final</label><input type="number" required value={form.price} onChange={e => setForm({...form, price: parseFloat(e.target.value)})} className="w-full bg-slate-800 border border-white/10 rounded-lg p-3 text-white font-mono font-bold"/></div>
+                        <div className="flex items-center gap-2 bg-slate-800 p-3 rounded-lg border border-white/10 mt-5"><input type="checkbox" checked={form.isRecurring} onChange={e => setForm({...form, isRecurring: e.target.checked})} className="rounded bg-slate-900 border-white/20"/><span className="text-xs text-slate-300 font-bold uppercase">Semanal</span></div>
                     </div>
 
-                    <div className="pt-4"><button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={20} /> {isEditMode ? 'Guardar Cambios' : 'Crear Turno'}</button></div>
+                    <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={20} /> {isEditMode ? 'Guardar Cambios' : 'Crear Turno'}</button>
                 </form>
             </div>
         </div>
