@@ -1,4 +1,3 @@
-// ARCHIVO COMPLETO: src/App.tsx
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
@@ -13,8 +12,8 @@ import { SettingsView } from './components/SettingsView';
 
 import { INITIAL_CONFIG, COLOR_THEMES } from './constants';
 import { User, Booking, Product, ClubConfig, Court, ActivityLogEntry, BookingStatus, PaymentMethod, CartItem, ActivityType, Expense } from './types';
-import { ArrowLeft, LayoutGrid, Lock, Bell, X, ShieldAlert } from 'lucide-react';
-import { useLicense } from './hooks/useLicense'; // Importación del Hook de Seguridad
+import { ArrowLeft, LayoutGrid, Lock, Bell, X, ShieldAlert } from 'lucide-center';
+import { useLicense } from './hooks/useLicense'; // <--- INTEGRACIÓN DEL HOOK
 
 import { 
   subscribeBookings, subscribeCourts, subscribeProducts, subscribeConfig, subscribeUsers, subscribeActivity, subscribeExpenses,
@@ -25,7 +24,7 @@ import {
   addExpense, deleteExpense
 } from './services/firestore';
 
-// --- NOTIFICACIONES ---
+// --- SONIDO DE NOTIFICACIÓN ---
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; 
 
 const NotificationToast = ({ message, onClose }: { message: string | null, onClose: () => void }) => {
@@ -43,7 +42,7 @@ const NotificationToast = ({ message, onClose }: { message: string | null, onClo
 };
 
 const App = () => {
-  const { isLocked, loading: loadingLicense } = useLicense(); // Monitoreo del Kill Switch
+  const { isLocked, loading: loadingLicense } = useLicense(); // <--- MONITOREO DE LICENCIA
   const [user, setUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [showLogin, setShowLogin] = useState(false);
@@ -144,7 +143,7 @@ const App = () => {
   const handleAddExpense = (e: Expense) => { addExpense(e); showToast('Gasto registrado'); };
   const handleDeleteExpense = (id: string) => { deleteExpense(id); showToast('Gasto eliminado'); };
 
-  // --- INTERFAZ DE BLOQUEO POR SUSPENSIÓN ---
+  // --- INTERFAZ DE BLOQUEO ADMINISTRATIVO ---
   if (!loadingLicense && isLocked) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
@@ -154,14 +153,13 @@ const App = () => {
           </div>
           <h1 className="text-3xl font-black text-white mb-4 tracking-tighter uppercase">Gestión Suspendida</h1>
           <p className="text-slate-400 leading-relaxed mb-8">
-            El acceso a este sistema ha sido restringido por motivos administrativos. Todas las operaciones han sido bloqueadas.
+            El acceso a esta plataforma ha sido restringido por motivos administrativos. Todas las funciones operativas han sido bloqueadas.
           </p>
-          <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 mb-8">
-            <p className="text-xs text-slate-500 uppercase font-bold tracking-widest mb-1">Estado del Servicio</p>
-            <p className="text-sm text-red-400 font-medium italic">Regularización pendiente</p>
+          <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 mb-8 text-xs font-mono text-slate-500">
+            ID: 79076092-0702-4cff-ad2b-ba8aaee65283
           </div>
           <p className="text-xs text-slate-600 font-medium">
-            Comuníquese con soporte técnico para restablecer el acceso.
+            Contacte a soporte administrativo para regularizar el servicio.
           </p>
         </div>
       </div>
@@ -173,7 +171,7 @@ const App = () => {
     return (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
             <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Verificando Licencia...</p>
+            <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Sincronizando licencia...</p>
         </div>
     );
   }
