@@ -61,6 +61,7 @@ export interface Product {
   stock: number;
   minStockAlert: number;
   imageUrl: string;
+  barcode?: string; // <--- NUEVO CAMPO PARA CÓDIGO DE BARRAS
 }
 
 export interface CartItem extends Product {
