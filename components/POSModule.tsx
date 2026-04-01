@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-// Añadí los iconos faltantes
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, QrCode, AlertTriangle, X, Copy, Share2, CheckCircle, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+// Iconos necesarios
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, QrCode, AlertTriangle, X, Copy, Share2, CheckCircle, Loader2, Barcode } from 'lucide-react';
 import { Product, CartItem, ClubConfig, PaymentMethod } from '../types';
 import { COLOR_THEMES } from '../constants';
 import { createCartPreference } from '../services/mercadopago';
@@ -20,6 +20,10 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   
+  // LÓGICA DE CÓDIGO DE BARRAS
+  const barcodeBuffer = useRef<string>('');
+  const lastKeyTime = useRef<number>(0);
+
   // Payment Modal State
   const [paymentModal, setPaymentModal] = useState<{ isOpen: boolean, type: PaymentMethod | null }>({ isOpen: false, type: null });
   const [qrUrl, setQrUrl] = useState<string | null>(null);
@@ -40,6 +44,43 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
     });
   };
 
+  // EFECTO PARA ESCUCHAR EL LECTOR DE CÓDIGOS DE BARRAS
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        // Evitamos capturar si estamos escribiendo en un input de texto normal
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+            return;
+        }
+
+        const currentTime = Date.now();
+        
+        // Si el intervalo entre teclas es mayor a 50ms, asumimos que es escritura manual y reiniciamos
+        if (currentTime - lastKeyTime.current > 50) {
+            barcodeBuffer.current = '';
+        }
+
+        lastKeyTime.current = currentTime;
+
+        if (e.key === 'Enter') {
+            if (barcodeBuffer.current.length > 2) {
+                const foundProduct = products.find(p => p.barcode === barcodeBuffer.current);
+                if (foundProduct) {
+                    addToCart(foundProduct);
+                    barcodeBuffer.current = ''; // Limpiamos después de añadir
+                } else {
+                    console.log("Código no encontrado:", barcodeBuffer.current);
+                    barcodeBuffer.current = '';
+                }
+            }
+        } else if (e.key.length === 1) { // Solo capturamos caracteres imprimibles
+            barcodeBuffer.current += e.key;
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [products]); // Re-suscribir si la lista de productos cambia
+
   const removeFromCart = (productId: string) => {
     setCart(prev => prev.filter(item => item.id !== productId));
   };
@@ -59,7 +100,6 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
 
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   
-  // Cálculo del total con recargo
   const feePercentage = config.mpFeePercentage || 0;
   const surcharge = paymentModal.type === PaymentMethod.QR ? (total * feePercentage / 100) : 0;
   const finalTotal = total + surcharge;
@@ -70,7 +110,6 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
   );
 
   const handlePaymentClick = async (method: PaymentMethod) => {
-      // CORRECCIÓN: Eliminamos el confirm() nativo. Siempre abrimos el modal.
       setPaymentModal({ isOpen: true, type: method });
       setQrUrl(null);
       
@@ -96,9 +135,15 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
       {/* Product Catalog */}
       <div className="flex-1 flex flex-col bg-slate-900/60 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl overflow-hidden">
         <div className="p-4 border-b border-white/10 space-y-4">
-            <div className="relative">
-                <input type="text" placeholder="Buscar producto..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-800 border-none rounded-xl py-3 pl-10 text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500"/>
-                <Search className="absolute left-3 top-3.5 text-slate-500 h-5 w-5"/>
+            <div className="flex items-center gap-4">
+                <div className="relative flex-1">
+                    <input type="text" placeholder="Buscar producto..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-800 border-none rounded-xl py-3 pl-10 text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500"/>
+                    <Search className="absolute left-3 top-3.5 text-slate-500 h-5 w-5"/>
+                </div>
+                <div className="hidden md:flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl text-blue-400">
+                    <Barcode size={20}/>
+                    <span className="text-xs font-bold uppercase tracking-wider">Escáner Activo</span>
+                </div>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                 {categories.map((cat: string) => (
@@ -122,7 +167,13 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
                                 )}
                             </div>
                             <h4 className="text-white font-medium text-sm leading-tight mb-1 line-clamp-2 flex-1">{product.name}</h4>
-                            <div className="flex justify-between items-center mt-2"><span className={`text-xs font-bold ${hasStock ? 'text-slate-400' : 'text-red-400'}`}>{hasStock ? `${product.stock} un.` : 'Sin Stock'}</span><span className="text-yellow-400 font-bold">${formatMoney(product.price)}</span></div>
+                            <div className="flex justify-between items-center mt-2">
+                                <div className="flex flex-col">
+                                    <span className={`text-[10px] font-bold ${hasStock ? 'text-slate-400' : 'text-red-400'}`}>{hasStock ? `${product.stock} un.` : 'Sin Stock'}</span>
+                                    {product.barcode && <span className="text-[9px] text-slate-500 font-mono tracking-tighter">{product.barcode}</span>}
+                                </div>
+                                <span className="text-yellow-400 font-bold">${formatMoney(product.price)}</span>
+                            </div>
                         </div>
                     );
                 })}
@@ -132,16 +183,23 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
 
       {/* Cart Sidebar */}
       <div className="w-full lg:w-[400px] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden">
-        <div className="p-5 bg-slate-100 border-b border-slate-200">
-            <h2 className="text-slate-800 font-bold text-xl flex items-center gap-2"><ShoppingCart className="text-slate-600"/> Carrito Actual</h2>
+        <div className="p-5 bg-slate-100 border-b border-slate-200 flex justify-between items-center">
+            <h2 className="text-slate-800 font-bold text-xl flex items-center gap-2"><ShoppingCart className="text-slate-600"/> Carrito</h2>
+            {cart.length > 0 && <button onClick={() => setCart([])} className="text-xs font-bold text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors">VACIAR</button>}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
             {cart.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400"><ShoppingCart size={48} className="mb-4 opacity-20"/><p>Carrito vacío</p></div>
+                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                    <div className="bg-slate-200/50 p-6 rounded-full mb-4">
+                        <Barcode size={48} className="opacity-20"/>
+                    </div>
+                    <p className="font-medium text-sm">Escanea un producto</p>
+                    <p className="text-xs opacity-60">o selecciónalo manualmente</p>
+                </div>
             ) : (
                 cart.map(item => (
-                    <div key={item.id} className="flex items-center gap-3 bg-white p-3 rounded-xl shadow-sm border border-slate-200">
+                    <div key={item.id} className="flex items-center gap-3 bg-white p-3 rounded-xl shadow-sm border border-slate-200 animate-in slide-in-from-right-2">
                          <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0"><img src={item.imageUrl} className="w-full h-full object-cover" alt="" /></div>
                          <div className="flex-1 min-w-0"><h4 className="text-slate-800 font-medium text-sm truncate">{item.name}</h4><p className="text-slate-500 text-xs">${formatMoney(item.price * item.quantity)}</p></div>
                          <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
@@ -172,7 +230,6 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
               <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative">
                   <button onClick={() => setPaymentModal({ isOpen: false, type: null })} className="absolute right-4 top-4 text-slate-400 hover:text-white"><X size={20}/></button>
                   
-                  {/* HEADER DEL MODAL (Icono y Título) */}
                   <div className="text-center mb-6">
                       <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg border border-white/5 
                         ${paymentModal.type === PaymentMethod.CASH ? 'bg-green-500/20 text-green-500 border-green-500/30' : ''}
@@ -189,14 +246,12 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
                           {paymentModal.type === PaymentMethod.TRANSFER && 'Transferencia'}
                       </h3>
                       
-                      {/* Recargo Comisión (Solo QR) */}
                       {paymentModal.type === PaymentMethod.QR && (config.mpFeePercentage || 0) > 0 && (
                           <div className="text-xs text-orange-400 mb-2 font-bold bg-orange-500/10 px-2 py-1 rounded inline-block border border-orange-500/20">
                              Recargo: {config.mpFeePercentage}% aplicado
                           </div>
                       )}
 
-                      {/* Total a Cobrar */}
                       <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 mt-4">
                         <p className="text-slate-400 text-sm mb-1">Total a cobrar</p>
                         <span className="text-white font-bold text-2xl block">
@@ -205,16 +260,12 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
                       </div>
                   </div>
 
-                  {/* CONTENIDO VARIABLE SEGÚN MÉTODO */}
-
-                  {/* --- EFECTIVO --- */}
                   {paymentModal.type === PaymentMethod.CASH && (
                        <p className="text-slate-300 text-sm text-center mb-6">
                            ¿Confirmas que has recibido el dinero total?
                        </p>
                   )}
 
-                  {/* --- QR CONTENT --- */}
                   {paymentModal.type === PaymentMethod.QR && (
                       <div className="bg-white p-4 rounded-xl mb-6 mx-auto w-fit shadow-inner min-h-[230px] flex flex-col items-center justify-center">
                           {isLoadingQr ? (
@@ -239,7 +290,6 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
                       </div>
                   )}
 
-                  {/* --- TRANSFER CONTENT --- */}
                   {paymentModal.type === PaymentMethod.TRANSFER && (
                       <div className="space-y-4 mb-6">
                           <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 text-center">
@@ -265,7 +315,6 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, onProces
                       </div>
                   )}
 
-                  {/* BOTÓN FINAL DE CONFIRMACIÓN */}
                   <button 
                       onClick={confirmModalPayment}
                       className={`w-full font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95
