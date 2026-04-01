@@ -1,34 +1,32 @@
+// src/hooks/useLicense.ts
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { licenseDb } from '../services/licenseService'; //
+import { licenseDb } from '../services/licenseService'; // Base de datos del SaaS
 
 export const useLicense = () => {
   const [isLocked, setIsLocked] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // ID exacto que aparece en tu captura de pantalla de Firebase
+  // ID exacto del documento en tu colección 'clients' del SaaS
   const LICENSE_ID = "7WlbYHPcvXivSLINHdqB"; 
 
   useEffect(() => {
-    // Escuchamos el documento en la base de datos administrativa (SaaS)
+    // Escucha el documento en la base de datos administrativa
     const clientRef = doc(licenseDb, "clients", LICENSE_ID);
 
     const unsubscribe = onSnapshot(clientRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const data = docSnapshot.data();
-        // Si isActive es false en el SaaS, bloqueamos la app de padel
+        // Bloquea si isActive es false en el SaaS
         setIsLocked(data.isActive === false); 
-        console.log("Estado de licencia verificado en SaaS:", data.isActive);
       } else {
-        // Si no encuentra el documento en el SaaS, bloqueamos por seguridad
-        console.error("ID de licencia no encontrado en el panel administrativo.");
+        // Bloqueo de seguridad si el documento no existe
         setIsLocked(true);
       }
       setLoading(false);
     }, (error) => {
-      console.error("Error al conectar con la base de datos de licencias:", error);
-      // Fail-safe: si falla la conexión, permitimos el acceso
-      setIsLocked(false); 
+      console.error("Error de licencia:", error);
+      setIsLocked(false); // Fail-safe: permite acceso si falla la conexión
       setLoading(false);
     });
 
