@@ -1,8 +1,7 @@
-// ARCHIVO COMPLETO: src/services/licenseService.ts
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
-// Credenciales de CENTROL-SOFT (Tu Panel Administrativo)
+// Credenciales de tu Panel SaaS (Centrol-Soft / Panel-Soft)
 const licenseConfig = {
   apiKey: import.meta.env.VITE_LICENSE_API_KEY,
   authDomain: import.meta.env.VITE_LICENSE_AUTH_DOMAIN,
