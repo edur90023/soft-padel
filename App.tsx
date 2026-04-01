@@ -44,7 +44,7 @@ const NotificationToast = ({ message, onClose }: { message: string | null, onClo
 };
 
 const App = () => {
-  const { isLocked, loading: loadingLicense } = useLicense(); // <--- CONSUMIR HOOK
+  const { isLocked, loading: loadingLicense } = useLicense(); // <--- CONSUMIR ESTADO DE LICENCIA
   const [user, setUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [showLogin, setShowLogin] = useState(false);
@@ -145,7 +145,7 @@ const App = () => {
   const handleAddExpense = (e: Expense) => { addExpense(e); showToast('Gasto registrado'); };
   const handleDeleteExpense = (id: string) => { deleteExpense(id); showToast('Gasto eliminado'); };
 
-  // --- LÓGICA DE BLOQUEO POR SUSPENSIÓN ---
+  // --- INTERFAZ DE BLOQUEO POR SUSPENSIÓN ---
   if (!loadingLicense && isLocked) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
@@ -153,28 +153,28 @@ const App = () => {
           <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/20">
             <ShieldAlert className="text-red-500 w-10 h-10 animate-pulse" />
           </div>
-          <h1 className="text-3xl font-black text-white mb-4 tracking-tighter">SERVICIO SUSPENDIDO</h1>
+          <h1 className="text-3xl font-black text-white mb-4 tracking-tighter uppercase">Gestión Suspendida</h1>
           <p className="text-slate-400 leading-relaxed mb-8">
-            El acceso a esta plataforma de gestión ha sido restringido temporalmente por el administrador del sistema.
+            El acceso a este sistema ha sido restringido por motivos administrativos. Todas las operaciones han sido bloqueadas.
           </p>
           <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 mb-8">
-            <p className="text-xs text-slate-500 uppercase font-bold tracking-widest mb-1">Motivo posible</p>
-            <p className="text-sm text-red-400 font-medium italic">Regularización administrativa pendiente</p>
+            <p className="text-xs text-slate-500 uppercase font-bold tracking-widest mb-1">Estado del Servicio</p>
+            <p className="text-sm text-red-400 font-medium italic">Regularización pendiente</p>
           </div>
           <p className="text-xs text-slate-600 font-medium">
-            Contacte a soporte técnico para restablecer el servicio.
+            Comuníquese con soporte técnico para restablecer el acceso.
           </p>
         </div>
       </div>
     );
   }
 
-  // --- PANTALLA DE CARGA INICIAL ---
+  // --- LOADER DE SINCRONIZACIÓN ---
   if (loadingLicense) {
     return (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
-            <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 font-medium animate-pulse uppercase tracking-widest text-xs">Validando Licencia...</p>
+            <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Verificando Credenciales...</p>
         </div>
     );
   }
