@@ -14,7 +14,7 @@ import { SettingsView } from './components/SettingsView';
 import { INITIAL_CONFIG, COLOR_THEMES } from './constants';
 import { User, Booking, Product, ClubConfig, Court, ActivityLogEntry, BookingStatus, PaymentMethod, CartItem, ActivityType, Expense } from './types';
 import { ArrowLeft, LayoutGrid, Lock, Bell, X, ShieldAlert } from 'lucide-react';
-import { useLicense } from './hooks/useLicense'; // <--- IMPORTAR HOOK
+import { useLicense } from './hooks/useLicense'; // Importación del Hook de Seguridad
 
 import { 
   subscribeBookings, subscribeCourts, subscribeProducts, subscribeConfig, subscribeUsers, subscribeActivity, subscribeExpenses,
@@ -25,10 +25,9 @@ import {
   addExpense, deleteExpense
 } from './services/firestore';
 
-// --- SONIDO DE NOTIFICACIÓN ---
+// --- NOTIFICACIONES ---
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; 
 
-// --- COMPONENTE DE NOTIFICACIÓN ---
 const NotificationToast = ({ message, onClose }: { message: string | null, onClose: () => void }) => {
     if (!message) return null;
     return (
@@ -44,7 +43,7 @@ const NotificationToast = ({ message, onClose }: { message: string | null, onClo
 };
 
 const App = () => {
-  const { isLocked, loading: loadingLicense } = useLicense(); // <--- CONSUMIR ESTADO DE LICENCIA
+  const { isLocked, loading: loadingLicense } = useLicense(); // Monitoreo del Kill Switch
   const [user, setUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [showLogin, setShowLogin] = useState(false);
@@ -174,7 +173,7 @@ const App = () => {
     return (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
             <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Verificando Credenciales...</p>
+            <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Verificando Licencia...</p>
         </div>
     );
   }
