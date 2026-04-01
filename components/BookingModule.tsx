@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Check, X, RefreshCw, Plus, CalendarDays, MapPin, Edit2, Trash2, Banknote, QrCode, CreditCard, Save, AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Copy, Share2, User, MessageCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Clock, Check, X, RefreshCw, Plus, CalendarDays, MapPin, Edit2, Trash2, Banknote, QrCode, CreditCard, Save, AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Copy, Share2, User, MessageCircle, CheckCircle, Loader2, Repeat } from 'lucide-react';
 import { Booking, BookingStatus, ClubConfig, Court, PaymentMethod } from '../types';
 import { COLOR_THEMES } from '../constants';
 import { createPreference } from '../services/mercadopago';
@@ -35,6 +35,33 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
     .filter(b => b.date === selectedDate && b.status !== BookingStatus.CANCELLED)
     .sort((a, b) => a.time.localeCompare(b.time));
 
+  // --- LÓGICA DE TURNOS FIJOS ---
+  const checkIsLastOfSeries = (booking: Booking) => {
+    if (!booking.seriesId) return false;
+    const seriesBookings = bookings.filter(b => b.seriesId === booking.seriesId && b.status !== BookingStatus.CANCELLED);
+    if (seriesBookings.length === 0) return false;
+    const dates = seriesBookings.map(b => new Date(b.date).getTime());
+    const maxDate = Math.max(...dates);
+    return new Date(booking.date).getTime() === maxDate;
+  };
+
+  const handleRenewSeries = (booking: Booking) => {
+    if (!window.confirm('¿Deseas programar 8 semanas más para este cliente fijo a partir de la semana siguiente?')) return;
+    const nextStartDate = new Date(booking.date + 'T12:00:00');
+    nextStartDate.setDate(nextStartDate.getDate() + 7);
+    const renewalData: Booking = {
+      ...booking,
+      id: `b${Date.now()}`,
+      date: nextStartDate.toISOString().split('T')[0],
+      isRecurring: true,
+      status: BookingStatus.PENDING,
+      paymentMethod: undefined
+    };
+    onAddBooking(renewalData);
+    setSelectedBooking(null);
+    alert('Nueva serie de 8 semanas generada.');
+  };
+
   const handleDateChange = (days: number) => {
       const d = new Date(selectedDate);
       d.setDate(d.getDate() + days);
@@ -56,19 +83,14 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
       setIsFormModalOpen(true);
   };
 
-  // --- LÓGICA DE PAGO ---
-
   const openPaymentModal = async (booking: Booking, method: PaymentMethod) => {
       setPaymentModal({ isOpen: true, type: method, booking });
       setQrUrl(null); 
-
-      // Si es QR, generamos el link de pago
       if (method === PaymentMethod.QR) {
           setIsLoadingQr(true);
           const fee = config.mpFeePercentage || 0;
           const finalPrice = booking.price + (booking.price * fee / 100);
           const title = `Reserva Cancha - ${booking.customerName}`;
-          
           const url = await createPreference(title, finalPrice);
           setQrUrl(url);
           setIsLoadingQr(false);
@@ -78,26 +100,20 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
   const handlePaymentSelect = (e: React.MouseEvent, booking: Booking, method?: PaymentMethod) => {
       e.stopPropagation(); 
       setActiveDropdownId(null); 
-
       if (!method) {
-          // Marcar como impago
           onUpdateBooking({ ...booking, paymentMethod: undefined });
           return;
       }
-
-      // Abrimos el modal para todos los métodos (incluido Efectivo) para confirmar
       openPaymentModal(booking, method);
   };
 
   const handleConfirmPayment = () => {
       if (!paymentModal.booking || !paymentModal.type) return;
-      
       const updated = { 
           ...paymentModal.booking, 
           paymentMethod: paymentModal.type,
           status: BookingStatus.CONFIRMED 
       };
-      
       onUpdateBooking(updated);
       setPaymentModal({ isOpen: false, type: null, booking: null });
   };
@@ -133,8 +149,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 h-full flex flex-col max-w-3xl mx-auto" onClick={() => setActiveDropdownId(null)}>
-      
-      {/* Barra de Control */}
       <div className="bg-slate-900/90 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg flex flex-col sm:flex-row justify-between items-center gap-4 sticky top-0 z-30">
         <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-lg border border-white/5 w-full sm:w-auto">
              <button onClick={() => handleDateChange(-1)} className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"><ChevronLeft size={20}/></button>
@@ -153,7 +167,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
         </div>
       </div>
 
-      {/* Lista de Turnos */}
       <div className="flex-1 space-y-4 relative z-0">
           {dailyBookings.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-slate-500 border border-dashed border-white/10 rounded-2xl bg-white/5">
@@ -166,6 +179,7 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
                   const court = courts.find(c => c.id === booking.courtId);
                   const isConfirmed = booking.status === BookingStatus.CONFIRMED;
                   const isDropdownActive = activeDropdownId === booking.id;
+                  const isLastOfSeries = checkIsLastOfSeries(booking);
 
                   return (
                       <div key={booking.id} onClick={() => setSelectedBooking(booking)} className={`relative group rounded-2xl border transition-all cursor-pointer shadow-md bg-slate-800 border-l-4 ${isConfirmed ? 'border-l-green-500' : 'border-l-yellow-500'} border-y-white/5 border-r-white/5 ${isDropdownActive ? 'z-50 ring-2 ring-blue-500/50' : 'z-0 hover:scale-[1.01] active:scale-[0.99]'}`}>
@@ -176,14 +190,17 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
                               </div>
                               <div className="flex-1 p-3 sm:p-4 flex flex-col justify-center min-w-0">
                                   <div className="flex justify-between items-start mb-1">
-                                      <h3 className="text-base sm:text-lg font-bold text-white truncate pr-2">{booking.customerName}</h3>
+                                      <h3 className="text-base sm:text-lg font-bold text-white truncate pr-2 flex items-center gap-2">
+                                        {booking.customerName}
+                                        {booking.seriesId && <Repeat size={14} className="text-blue-400" />}
+                                        {isLastOfSeries && <AlertCircle size={14} className="text-orange-500 animate-pulse" />}
+                                      </h3>
                                   </div>
                                   <div className="flex items-center gap-3 text-sm text-slate-400 mb-1">
                                       <span className="flex items-center gap-1.5 text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded-md text-xs font-bold uppercase tracking-wide"><MapPin size={10} /> {court?.name || 'Cancha ?'}</span>
                                   </div>
                                   <div className="flex items-center gap-3 mt-1 sm:mt-2">
                                       <span className="font-mono text-slate-300 font-bold bg-white/5 px-2 py-0.5 rounded text-xs border border-white/5">{formatMoney(booking.price)}</span>
-                                      {booking.seriesId && (<span className="flex items-center gap-1 text-[10px] text-blue-400 font-bold uppercase border border-blue-500/20 px-1.5 py-0.5 rounded-full"><RefreshCw size={10}/> Fijo</span>)}
                                   </div>
                               </div>
                               <div className="flex flex-col items-end justify-center p-3 sm:p-4 gap-2 border-l border-white/5 bg-white/[0.02] min-w-[140px] rounded-r-2xl relative">
@@ -210,28 +227,25 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
       </div>
 
       {isFormModalOpen && (
-          <BookingFormModal 
-            isOpen={isFormModalOpen} 
-            onClose={() => { setIsFormModalOpen(false); setEditingBooking(null); }} 
-            courts={courts} 
-            onSave={handleFormSave} 
-            initialDate={selectedDate} 
-            allBookings={bookings} 
-            editingBooking={editingBooking}
-          />
+          <BookingFormModal isOpen={isFormModalOpen} onClose={() => { setIsFormModalOpen(false); setEditingBooking(null); }} courts={courts} onSave={handleFormSave} initialDate={selectedDate} allBookings={bookings} editingBooking={editingBooking} />
       )}
 
       {selectedBooking && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-              <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative">
-                  <div className="mb-6 border-b border-white/10 pb-4">
+              <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative overflow-hidden">
+                  {selectedBooking.seriesId && checkIsLastOfSeries(selectedBooking) && (
+                    <div className="absolute top-0 left-0 right-0 bg-orange-600 p-2 flex justify-between items-center px-4">
+                        <span className="text-[10px] font-black text-white flex items-center gap-1"><AlertCircle size={12}/> ¡ÚLTIMO TURNO DE LA SERIE!</span>
+                        <button onClick={() => handleRenewSeries(selectedBooking)} className="bg-white text-orange-600 px-2 py-0.5 rounded text-[10px] font-black hover:bg-slate-100 transition-colors">RENOVAR 8 SEMANAS</button>
+                    </div>
+                  )}
+                  <div className={`mb-6 border-b border-white/10 pb-4 ${selectedBooking.seriesId && checkIsLastOfSeries(selectedBooking) ? 'mt-6' : ''}`}>
                       <div className="flex justify-between items-start">
                           <div><h3 className="text-xl font-bold text-white mb-1">Detalle del Turno</h3><div className="flex items-center gap-2 text-sm text-slate-400"><CalendarDays size={14}/> {selectedBooking.date}<Clock size={14}/> {selectedBooking.time}</div></div>
                           <div className="flex gap-2"><button onClick={() => handleEditClick(selectedBooking)} className="p-2 bg-slate-800 rounded-lg text-blue-400 hover:bg-slate-700 hover:text-white transition-colors"><Edit2 size={18} /></button><button onClick={() => setSelectedBooking(null)} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"><X size={18}/></button></div>
                       </div>
                       <div className="mt-3 text-sm text-blue-400 font-bold flex items-center gap-1"><MapPin size={14}/> {courts.find(c => c.id === selectedBooking.courtId)?.name}</div>
                   </div>
-
                   <div className="space-y-4 mb-6">
                       <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-white/5">
                           <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-300"><User size={20}/></div>
@@ -249,7 +263,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
                        )}
                        <div className="grid grid-cols-2 gap-2">
                            <button onClick={() => handleNotify(selectedBooking)} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-xl font-bold text-sm border border-white/5"><MessageCircle size={16}/> WhatsApp</button>
-                           {/* Boton Fijo condicional */}
                            {!selectedBooking.seriesId && (
                                <button onClick={() => { onUpdateBooking({...selectedBooking, isRecurring: true}); setSelectedBooking(null); }} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-xl font-bold text-sm border border-white/5"><RefreshCw size={16}/> Hacer Fijo</button>
                            )}
@@ -260,7 +273,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
           </div>
       )}
 
-      {/* MODAL DE PAGO UNIFICADO */}
       {paymentModal.isOpen && paymentModal.booking && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
               <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative">
@@ -278,7 +290,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
                       {paymentModal.type === PaymentMethod.QR && (config.mpFeePercentage || 0) > 0 && (<div className="text-xs text-orange-400 mb-2 font-bold bg-orange-500/10 px-2 py-1 rounded inline-block border border-orange-500/20">Recargo: {config.mpFeePercentage}% aplicado</div>)}
                       <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 mt-4"><p className="text-slate-400 text-sm mb-1">Total a cobrar</p><span className="text-white font-bold text-2xl block">{formatMoney(getFinalPrice())}</span></div>
                   </div>
-
                   {paymentModal.type === PaymentMethod.QR && (
                       <div className="bg-white p-4 rounded-xl mb-6 mx-auto w-fit shadow-inner min-h-[230px] flex flex-col items-center justify-center">
                           {isLoadingQr ? (
@@ -296,7 +307,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
                           )}
                       </div>
                   )}
-
                   {paymentModal.type === PaymentMethod.TRANSFER && (
                       <div className="space-y-4 mb-6">
                           <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 text-center">
@@ -312,7 +322,6 @@ export const BookingModule: React.FC<BookingModuleProps> = ({ bookings, courts, 
                           }} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"><Share2 size={18}/> Compartir por WhatsApp</button>
                       </div>
                   )}
-
                   <button onClick={handleConfirmPayment} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">Confirmar Cobro Realizado</button>
               </div>
           </div>
@@ -356,7 +365,6 @@ const BookingFormModal = ({ isOpen, onClose, courts, onSave, initialDate, allBoo
         if (!checkAvailability(form.courtId, form.date!, form.time!, form.duration!)) {
             return alert("⚠️ ERROR: El horario ya no está disponible.");
         }
-        // Si es recurrente, forzamos PENDING para App.tsx
         const finalBooking = {
             ...form as Booking,
             id: isEditMode ? form.id : `b${Date.now()}`,
@@ -377,7 +385,6 @@ const BookingFormModal = ({ isOpen, onClose, courts, onSave, initialDate, allBoo
                         <div><label className="text-[10px] text-slate-500 uppercase font-bold">Fecha</label><input type="date" required value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="w-full bg-slate-800 border-white/10 rounded-lg p-2 text-white text-sm"/></div>
                         <div><label className="text-[10px] text-slate-500 uppercase font-bold">Hora Inicio</label><input type="time" required value={form.time} onChange={e => setForm({...form, time: e.target.value})} className="w-full bg-slate-800 border-white/10 rounded-lg p-2 text-white text-sm"/></div>
                     </div>
-                    
                     <div>
                         <label className="text-[10px] text-slate-500 uppercase font-bold mb-2 block">Duración</label>
                         <div className="grid grid-cols-3 gap-2">
@@ -386,7 +393,6 @@ const BookingFormModal = ({ isOpen, onClose, courts, onSave, initialDate, allBoo
                             ))}
                         </div>
                     </div>
-
                     <div>
                         <label className="text-[10px] text-slate-500 uppercase font-bold mb-2 block">Canchas Disponibles</label>
                         <div className="space-y-2">
@@ -401,17 +407,14 @@ const BookingFormModal = ({ isOpen, onClose, courts, onSave, initialDate, allBoo
                             })}
                         </div>
                     </div>
-
                     <div className="space-y-3 pt-2">
                         <input required placeholder="Nombre del Cliente" value={form.customerName} onChange={e => setForm({...form, customerName: e.target.value})} className="w-full bg-slate-800 border-white/10 rounded-lg p-3 text-white text-sm"/>
                         <input placeholder="Teléfono (WhatsApp)" value={form.customerPhone} onChange={e => setForm({...form, customerPhone: e.target.value})} className="w-full bg-slate-800 border-white/10 rounded-lg p-3 text-white text-sm"/>
                     </div>
-
                     <div className="grid grid-cols-2 gap-4 items-end">
                         <div><label className="text-[10px] text-slate-500 uppercase font-bold">Precio Final</label><input type="number" required value={form.price} onChange={e => setForm({...form, price: parseFloat(e.target.value)})} className="w-full bg-slate-800 border-white/10 rounded-lg p-3 text-white font-mono font-bold"/></div>
                         <div className="flex items-center gap-2 bg-slate-800 p-3 rounded-lg border border-white/10 h-[50px] cursor-pointer"><input type="checkbox" id="rec" checked={form.isRecurring} onChange={e => setForm({...form, isRecurring: e.target.checked})} className="rounded"/><label htmlFor="rec" className="text-[10px] text-slate-300 font-bold uppercase cursor-pointer">Fijo (8 Semanas)</label></div>
                     </div>
-
                     <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
                         <Save size={20} /> {isEditMode ? 'Guardar Cambios' : 'Crear Turno'}
                     </button>
