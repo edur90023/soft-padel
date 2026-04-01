@@ -1,7 +1,7 @@
-// ARCHIVO COMPLETO: src/hooks/useLicense.ts
+// ARCHIVO COMPLETO: hooks/useLicense.ts
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
-import { db } from '../services/firestore';
+import { db } from '../firebaseConfig'; // <--- CAMBIO AQUÍ: Importar desde firebaseConfig
 
 /**
  * Hook para controlar el estado del servicio remoto (Kill Switch)
@@ -13,7 +13,6 @@ export const useLicense = () => {
 
   useEffect(() => {
     // 1. Primero obtenemos la configuración principal del club
-    // En tu firestore.ts, CONFIG_COL es 'club_config' y CONFIG_DOC_ID es 'main_config'
     const configRef = doc(db, 'club_config', 'main_config');
 
     const checkStatus = async () => {
