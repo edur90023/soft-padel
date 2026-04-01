@@ -13,7 +13,9 @@ import { SettingsView } from './components/SettingsView';
 import { INITIAL_CONFIG, COLOR_THEMES } from './constants';
 import { User, Booking, Product, ClubConfig, Court, ActivityLogEntry, BookingStatus, PaymentMethod, CartItem, ActivityType, Expense } from './types';
 import { ArrowLeft, LayoutGrid, Lock, Bell, X, ShieldAlert } from 'lucide-react';
-import { useLicense } from './hooks/useLicense'; // <--- INTEGRACIÓN DEL HOOK
+
+// --- IMPORTACIONES DE SEGURIDAD Y LICENCIA ---
+import { useLicense } from './hooks/useLicense';
 
 import { 
   subscribeBookings, subscribeCourts, subscribeProducts, subscribeConfig, subscribeUsers, subscribeActivity, subscribeExpenses,
@@ -27,6 +29,7 @@ import {
 // --- SONIDO DE NOTIFICACIÓN ---
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; 
 
+// --- COMPONENTE DE NOTIFICACIÓN ---
 const NotificationToast = ({ message, onClose }: { message: string | null, onClose: () => void }) => {
     if (!message) return null;
     return (
@@ -41,8 +44,33 @@ const NotificationToast = ({ message, onClose }: { message: string | null, onClo
     );
 };
 
+// --- VISTA DE SUSPENSIÓN DE SERVICIO ---
+const SuspendedView = () => (
+  <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
+    <div className="max-w-md w-full bg-slate-900 border border-red-500/30 p-10 rounded-3xl shadow-2xl shadow-red-500/10 backdrop-blur-xl animate-in fade-in zoom-in-95">
+      <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/20">
+        <ShieldAlert className="text-red-500 w-10 h-10 animate-pulse" />
+      </div>
+      <h1 className="text-3xl font-black text-white mb-4 tracking-tighter uppercase">Gestión Suspendida</h1>
+      <p className="text-slate-400 leading-relaxed mb-8">
+        El acceso a este sistema ha sido restringido por motivos administrativos. Todas las operaciones han sido bloqueadas.
+      </p>
+      <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 mb-8">
+        <p className="text-xs text-slate-500 uppercase font-bold tracking-widest mb-1">Estado actual</p>
+        <p className="text-sm text-red-400 font-medium italic">Regularización de servicio pendiente</p>
+      </div>
+      <p className="text-xs text-slate-600 font-medium italic">
+        Comuníquese con el proveedor de software para restablecer el acceso.
+      </p>
+    </div>
+  </div>
+);
+
+// --- APP COMPONENT ---
 const App = () => {
-  const { isLocked, loading: loadingLicense } = useLicense(); // <--- MONITOREO DE LICENCIA
+  // 1. VERIFICACIÓN DE LICENCIA (Kill Switch)
+  const { isLocked, loading: licenseLoading } = useLicense();
+
   const [user, setUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [showLogin, setShowLogin] = useState(false);
@@ -93,14 +121,21 @@ const App = () => {
   
   const handleUpdateStatus = async (id: string, s: BookingStatus) => {
       const bookingToDelete = bookings.find(b => b.id === id);
+      
       if (s === BookingStatus.CANCELLED && bookingToDelete?.seriesId) {
           if (window.confirm("¿Deseas eliminar todos los turnos futuros de esta serie semanal?")) {
-              const futureBookings = bookings.filter(b => b.seriesId === bookingToDelete.seriesId && b.date >= bookingToDelete.date && b.status !== BookingStatus.CANCELLED);
+              const futureBookings = bookings.filter(b => 
+                  b.seriesId === bookingToDelete.seriesId && 
+                  b.date >= bookingToDelete.date &&
+                  b.status !== BookingStatus.CANCELLED
+              );
+              
               await Promise.all(futureBookings.map(b => updateBookingStatus(b.id, BookingStatus.CANCELLED)));
               handleLogActivity('BOOKING', `Serie cancelada: ${bookingToDelete.customerName}`);
               return;
           }
       }
+      
       updateBookingStatus(id, s);
       handleLogActivity('BOOKING', `Estado actualizado: ${s}`);
   };
@@ -118,18 +153,30 @@ const App = () => {
           const seriesId = `series-${Date.now()}`;
           const startDate = new Date(booking.date + 'T12:00:00');
           const batchCreations = [];
+
           for (let i = 0; i < 8; i++) {
               const nextDate = new Date(startDate);
               nextDate.setDate(startDate.getDate() + (i * 7));
               const dateString = nextDate.toISOString().split('T')[0];
-              batchCreations.push(addBooking({ ...booking, id: `b-${seriesId}-${i}`, date: dateString, status: BookingStatus.PENDING, seriesId: seriesId }));
+              
+              batchCreations.push(addBooking({
+                  ...booking,
+                  id: `b-${seriesId}-${i}`,
+                  date: dateString,
+                  status: BookingStatus.PENDING, 
+                  seriesId: seriesId
+              }));
           }
           await Promise.all(batchCreations);
           handleLogActivity('BOOKING', `Turno Fijo creado: ${booking.customerName} (8 semanas)`);
       } else {
           await addBooking(booking);
-          if (booking.status === BookingStatus.CONFIRMED && booking.paymentMethod) { handleLogActivity('BOOKING', `Nueva Reserva Pagada: ${booking.customerName}`, booking.price, booking.paymentMethod); }
-          else { handleLogActivity('BOOKING', `Nueva Reserva: ${booking.customerName}`, booking.price); }
+          if (booking.status === BookingStatus.CONFIRMED && booking.paymentMethod) { 
+              handleLogActivity('BOOKING', `Nueva Reserva Pagada: ${booking.customerName}`, booking.price, booking.paymentMethod); 
+          }
+          else { 
+              handleLogActivity('BOOKING', `Nueva Reserva: ${booking.customerName}`, booking.price); 
+          }
       }
   };
 
@@ -143,39 +190,20 @@ const App = () => {
   const handleAddExpense = (e: Expense) => { addExpense(e); showToast('Gasto registrado'); };
   const handleDeleteExpense = (id: string) => { deleteExpense(id); showToast('Gasto eliminado'); };
 
-  // --- INTERFAZ DE BLOQUEO ADMINISTRATIVO ---
-  if (!loadingLicense && isLocked) {
+  // --- CONTROL DE BLOQUEO POR LICENCIA ---
+  if (licenseLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
-        <div className="max-w-md w-full bg-slate-900 border border-red-500/30 p-10 rounded-3xl shadow-2xl shadow-red-500/10 backdrop-blur-xl animate-in fade-in zoom-in-95">
-          <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/20">
-            <ShieldAlert className="text-red-500 w-10 h-10 animate-pulse" />
-          </div>
-          <h1 className="text-3xl font-black text-white mb-4 tracking-tighter uppercase">Gestión Suspendida</h1>
-          <p className="text-slate-400 leading-relaxed mb-8">
-            El acceso a esta plataforma ha sido restringido por motivos administrativos. Todas las funciones operativas han sido bloqueadas.
-          </p>
-          <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 mb-8 text-xs font-mono text-slate-500">
-            ID: 79076092-0702-4cff-ad2b-ba8aaee65283
-          </div>
-          <p className="text-xs text-slate-600 font-medium">
-            Contacte a soporte administrativo para regularizar el servicio.
-          </p>
-        </div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
-  // --- LOADER DE SINCRONIZACIÓN ---
-  if (loadingLicense) {
-    return (
-        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
-            <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Sincronizando licencia...</p>
-        </div>
-    );
+  if (isLocked) {
+    return <SuspendedView />;
   }
 
+  // --- FLUJO DE LOGIN / ADMINISTRACIÓN ---
   if (!user) {
     const theme = COLOR_THEMES[config.courtColorTheme];
     if (showLogin) {
@@ -207,9 +235,12 @@ const App = () => {
             {activeView === 'pos' && <POSModule products={products} config={config} onProcessSale={handleProcessSale} />}
             {activeView === 'inventory' && <InventoryModule products={products} config={config} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} />}
             {activeView === 'activity' && <ActivityModule activities={activities} config={config} />}
+            
             {activeView === 'cashbox' && <CashboxModule config={config} role={user.role} activities={activities} expenses={expenses} onLogActivity={handleLogActivity} />}
             {activeView === 'reports' && <ReportsModule bookings={bookings} activities={activities} expenses={expenses} onAddExpense={handleAddExpense} onDeleteExpense={handleDeleteExpense} />}
+            
             {activeView === 'settings' && <SettingsView config={config} courts={courts} users={users} onUpdateConfig={handleUpdateConfig} onUpdateCourts={handleUpdateCourts} onUpdateUsers={handleUpdateUsers} />}
+            
             {activeView === 'public' && <PublicBookingView config={config} courts={courts} bookings={bookings} onAddBooking={handleAddBooking} />}
         </Layout>
     </>
