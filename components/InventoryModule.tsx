@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Package, Plus, Search, Edit2, Trash2, AlertTriangle, Image as ImageIcon, X, Check, Upload, ChevronRight, Filter } from 'lucide-react';
+import { Package, Plus, Search, Edit2, Trash2, AlertTriangle, Image as ImageIcon, X, Check, Upload, ChevronRight, Barcode } from 'lucide-react';
 import { Product, ClubConfig } from '../types';
 import { COLOR_THEMES } from '../constants';
 
@@ -14,14 +14,14 @@ interface InventoryModuleProps {
 const EmptyProduct: Product = {
     id: '',
     name: '',
-    category: 'Bebidas', // default
+    category: 'Bebidas',
     price: 0,
     stock: 0,
     minStockAlert: 5,
-    imageUrl: ''
+    imageUrl: '',
+    barcode: '' // Inicializamos el campo
 };
 
-// Helper para redimensionar imágenes y evitar errores de tamaño en Firebase
 const processImage = (file: File): Promise<string> => {
     return new Promise((resolve) => {
         const reader = new FileReader();
@@ -31,16 +31,16 @@ const processImage = (file: File): Promise<string> => {
             img.src = event.target?.result as string;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 500; // Reducimos a 500px para no saturar la BD
+                const MAX_WIDTH = 500;
                 const scaleSize = MAX_WIDTH / img.width;
                 canvas.width = MAX_WIDTH;
                 canvas.height = img.height * scaleSize;
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    resolve(canvas.toDataURL(file.type)); // Retorna imagen optimizada
+                    resolve(canvas.toDataURL(file.type));
                 } else {
-                    resolve(event.target?.result as string); // Fallback
+                    resolve(event.target?.result as string);
                 }
             };
         };
@@ -55,10 +55,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
   const [categoryFilter, setCategoryFilter] = useState('Todas');
   
   const theme = COLOR_THEMES[config.courtColorTheme];
-  // Genera las categorías dinámicamente para el filtro basándose en los productos existentes
   const categories = ['Todas', ...Array.from(new Set(products.map(p => p.category)))];
 
-  // Handlers
   const handleOpenAdd = () => {
       setEditingProduct(null);
       setFormData({...EmptyProduct, id: Date.now().toString()});
@@ -67,7 +65,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
 
   const handleOpenEdit = (product: Product) => {
       setEditingProduct(product);
-      setFormData(product);
+      setFormData({ ...EmptyProduct, ...product });
       setIsModalOpen(true);
   };
 
@@ -75,7 +73,6 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
       const file = e.target.files?.[0];
       if (file) {
           try {
-              // Procesamos la imagen para reducir tamaño
               const optimizedImage = await processImage(file);
               setFormData(prev => ({ ...prev, imageUrl: optimizedImage }));
           } catch (error) {
@@ -105,14 +102,16 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
   };
 
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = 
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        p.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.barcode && p.barcode.includes(searchTerm)); // También filtramos por código en la tabla
     const matchesCategory = categoryFilter === 'Todas' || p.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
 
   return (
     <div className="space-y-4 animate-in slide-in-from-right-4 duration-500 pb-20 md:pb-0">
-      {/* Header Compacto */}
       <div className="bg-slate-900/60 p-4 rounded-xl border border-white/10 backdrop-blur-md shadow-xl flex flex-col md:flex-row gap-4 justify-between items-center sticky top-0 z-20">
         <div className="flex items-center gap-3 w-full md:w-auto">
              <div className="bg-blue-500/20 p-2 rounded-lg text-blue-400">
@@ -128,7 +127,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
              <div className="relative flex-1">
                 <input 
                     type="text" 
-                    placeholder="Buscar..." 
+                    placeholder="Buscar por nombre o código..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full bg-slate-800 border border-white/10 rounded-lg py-2.5 pl-9 text-sm text-white focus:ring-2 focus:ring-blue-500"
@@ -155,9 +154,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
         </div>
       </div>
 
-      {/* List View (Table style for PWA) */}
       <div className="bg-slate-900/60 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden shadow-lg">
-          {/* Table Header (Desktop only) */}
           <div className="hidden md:grid grid-cols-[3fr_1.5fr_1.5fr_1fr_0.5fr] gap-4 p-4 border-b border-white/10 bg-white/5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
               <div>Producto</div>
               <div>Categoría</div>
@@ -175,10 +172,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
                         onClick={() => handleOpenEdit(product)}
                         className="group relative flex flex-col md:grid md:grid-cols-[3fr_1.5fr_1.5fr_1fr_0.5fr] gap-3 md:gap-4 p-4 hover:bg-white/5 transition-colors cursor-pointer"
                     >
-                        {/* Status Stripe (Mobile) */}
                         <div className={`absolute left-0 top-0 bottom-0 w-1 ${isLowStock ? 'bg-red-500' : 'bg-green-500'} md:hidden`}></div>
 
-                        {/* Product Info (Name + Image) */}
                         <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded-lg bg-slate-800 flex-shrink-0 overflow-hidden border border-white/10 relative">
                                 {product.imageUrl ? (
@@ -190,16 +185,21 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
                             </div>
                             <div className="min-w-0 flex-1">
                                 <h3 className="text-white font-semibold text-sm leading-tight truncate pr-2">{product.name}</h3>
-                                <p className="text-xs text-slate-500 mt-1 md:hidden">{product.category}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <p className="text-xs text-slate-500 md:hidden">{product.category}</p>
+                                    {product.barcode && (
+                                        <span className="text-[10px] text-slate-500 flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded">
+                                            <Barcode size={10}/> {product.barcode}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
-                        {/* Category (Desktop) */}
                         <div className="hidden md:flex items-center text-sm text-slate-400">
                             <span className="bg-white/5 px-2 py-1 rounded text-xs">{product.category}</span>
                         </div>
 
-                        {/* Stock Status */}
                         <div className="flex items-center justify-between md:justify-start">
                             <div className={`flex items-center gap-2 px-2 py-1 rounded text-xs font-medium border
                                 ${isLowStock 
@@ -210,16 +210,13 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
                                 <span>{product.stock} un.</span>
                                 {isLowStock && <span className="hidden sm:inline">- Reponer</span>}
                             </div>
-                            {/* Mobile Price moves here */}
                             <span className="md:hidden font-mono font-bold text-white">${product.price}</span>
                         </div>
 
-                        {/* Price (Desktop) */}
                         <div className="hidden md:flex items-center justify-end font-mono font-bold text-white text-sm">
                             ${product.price}
                         </div>
 
-                        {/* Actions */}
                         <div className="hidden md:flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                              <button 
                                 onClick={(e) => { e.stopPropagation(); handleOpenEdit(product); }} 
@@ -235,7 +232,6 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
                              </button>
                         </div>
                         
-                        {/* Mobile Chevron (Indicates clickable) */}
                         <div className="absolute right-4 top-1/2 -translate-y-1/2 md:hidden text-slate-600">
                             <ChevronRight size={16} />
                         </div>
@@ -252,7 +248,6 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
           )}
       </div>
 
-      {/* Add/Edit Modal */}
       {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
               <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
@@ -263,18 +258,13 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
                   
                   <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
                       <div className="flex gap-4">
-                           {/* Image Upload Preview */}
                            <div className="w-20 h-20 bg-slate-800 rounded-xl border-2 border-dashed border-white/20 flex items-center justify-center relative overflow-hidden group cursor-pointer hover:border-blue-500 hover:bg-slate-800/80 transition-all flex-shrink-0">
                                 {formData.imageUrl ? (
                                     <img src={formData.imageUrl} className="w-full h-full object-cover" alt="Preview"/>
                                 ) : (
                                     <ImageIcon className="text-slate-500 group-hover:text-blue-500"/>
                                 )}
-                                
-                                {/* z-20 para que esté por encima de todo */}
                                 <input type="file" className="absolute inset-0 opacity-0 cursor-pointer z-20" accept="image/*" onChange={handleImageUpload} />
-                                
-                                {/* pointer-events-none para no bloquear el clic */}
                                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                                     <Upload className="text-white" size={16}/>
                                 </div>
@@ -300,7 +290,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
                                         className="w-full bg-slate-800 border border-white/10 rounded-lg p-2.5 text-sm text-white focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="Bebidas">Bebidas</option>
-                                        <option value="Comestibles">Comestibles</option> {/* NUEVA CATEGORÍA */}
+                                        <option value="Comestibles">Comestibles</option>
                                         <option value="Accesorios">Accesorios</option>
                                         <option value="Paletas">Paletas</option>
                                         <option value="Indumentaria">Indumentaria</option>
@@ -308,6 +298,22 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ products, conf
                                     </select>
                                 </div>
                            </div>
+                      </div>
+
+                      {/* NUEVO CAMPO: CÓDIGO DE BARRAS */}
+                      <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
+                          <label className="block text-xs font-bold text-blue-400 uppercase tracking-wider mb-2">Código de Barras</label>
+                          <div className="relative">
+                              <Barcode className="absolute left-3 top-2.5 text-slate-500" size={18}/>
+                              <input 
+                                  type="text" 
+                                  value={formData.barcode || ''}
+                                  onChange={e => setFormData({...formData, barcode: e.target.value})}
+                                  className="w-full bg-slate-900 border border-white/10 rounded-lg p-2.5 pl-10 text-sm text-white focus:ring-2 focus:ring-blue-500 font-mono"
+                                  placeholder="Escanea o escribe el código..."
+                              />
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-2 italic">Haz clic en el cuadro y escanea el producto para cargar el código automáticamente.</p>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
