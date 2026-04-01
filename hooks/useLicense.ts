@@ -1,55 +1,46 @@
 // ARCHIVO COMPLETO: src/hooks/useLicense.ts
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { db } from '../firebaseConfig'; // DB del Club
+import { licenseDb } from '../services/licenseService'; // DB del SaaS
 
-/**
- * Hook para controlar el estado del servicio remoto (Kill Switch)
- * Se sincroniza con el ID guardado en la base de datos del club.
- */
 export const useLicense = () => {
   const [isLocked, setIsLocked] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Definimos las rutas según tu firestore.ts
-    const CONFIG_COL = 'club_config';
-    const CONFIG_DOC_ID = 'main_config';
-
-    const initLicenseCheck = async () => {
+    const fetchIdAndListen = async () => {
       try {
-        // 2. Leemos la licencia configurada en el club de Padel
-        const configRef = doc(db, CONFIG_COL, CONFIG_DOC_ID);
+        // 1. Leemos el ID desde la configuración propia del club (DB local)
+        const configRef = doc(db, 'club_config', 'main_config');
         const configSnap = await getDoc(configRef);
-
+        
         if (configSnap.exists()) {
-          const licenseKey = configSnap.data().licenseKey;
+          const licenseId = configSnap.data().licenseKey;
 
-          if (!licenseKey) {
-            console.error("No se encontró licenseKey en la base de datos del club.");
+          if (!licenseId) {
+            console.error("⚠️ No se encontró licenseKey en la DB local.");
+            setIsLocked(true); // Bloqueo preventivo si no hay ID
             setLoading(false);
             return;
           }
 
-          // 3. ESCUCHA EN TIEMPO REAL:
-          // Escuchamos el documento del cliente en la colección 'clients'
-          // Este es el documento que tu Panel SaaS modifica al presionar el botón.
-          const clientRef = doc(db, 'clients', licenseKey);
+          // 2. Escuchamos en TIEMPO REAL el panel administrativo (DB SaaS)
+          const clientRef = doc(licenseDb, "clients", licenseId);
 
           const unsubscribe = onSnapshot(clientRef, (docSnapshot) => {
             if (docSnapshot.exists()) {
               const data = docSnapshot.data();
-              // Si isActive es false en el SaaS, bloqueamos aquí.
-              setIsLocked(data.isActive === false);
-              console.log(`Estado de licencia (${licenseKey}):`, data.isActive ? "ACTIVO" : "SUSPENDIDO");
+              // Si isActive es false en el panel SaaS -> BLOQUEAR
+              setIsLocked(data.isActive === false); 
+              console.log(`Licencia ${licenseId}: ${data.isActive ? 'ACTIVA' : 'BLOQUEADA'}`);
             } else {
-              // Si el ID existe en el club pero no en la tabla de clientes del SaaS
-              console.warn("El ID de licencia no existe en la colección de administración.");
-              setIsLocked(false); 
+              setIsLocked(true); // Bloqueo si el cliente no existe en el SaaS
             }
             setLoading(false);
           }, (error) => {
-            console.error("Error en la conexión de licencia:", error);
+            console.error("Error de conexión con LicenseDb:", error);
+            setIsLocked(false); // Fail-safe: si falla el SaaS, permitimos seguir
             setLoading(false);
           });
 
@@ -57,13 +48,14 @@ export const useLicense = () => {
         } else {
           setLoading(false);
         }
-      } catch (err) {
-        console.error("Fallo crítico al validar licencia:", err);
+      } catch (error) {
+        console.error("Fallo crítico en useLicense:", error);
         setLoading(false);
       }
     };
 
-    initLicenseCheck();
+    const unsubPromise = fetchIdAndListen();
+    return () => { unsubPromise.then(u => u && u()); };
   }, []);
 
   return { isLocked, loading };
