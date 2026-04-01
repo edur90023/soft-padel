@@ -12,7 +12,7 @@ import { SettingsView } from './components/SettingsView';
 
 import { INITIAL_CONFIG, COLOR_THEMES } from './constants';
 import { User, Booking, Product, ClubConfig, Court, ActivityLogEntry, BookingStatus, PaymentMethod, CartItem, ActivityType, Expense } from './types';
-import { ArrowLeft, LayoutGrid, Lock, Bell, X, ShieldAlert } from 'lucide-center';
+import { ArrowLeft, LayoutGrid, Lock, Bell, X, ShieldAlert } from 'lucide-react';
 import { useLicense } from './hooks/useLicense'; // <--- INTEGRACIÓN DEL HOOK
 
 import { 
