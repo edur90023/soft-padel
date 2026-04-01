@@ -1,3 +1,4 @@
+// ARCHIVO COMPLETO: src/App.tsx
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
@@ -12,7 +13,8 @@ import { SettingsView } from './components/SettingsView';
 
 import { INITIAL_CONFIG, COLOR_THEMES } from './constants';
 import { User, Booking, Product, ClubConfig, Court, ActivityLogEntry, BookingStatus, PaymentMethod, CartItem, ActivityType, Expense } from './types';
-import { ArrowLeft, LayoutGrid, Lock, Bell, X } from 'lucide-react';
+import { ArrowLeft, LayoutGrid, Lock, Bell, X, ShieldAlert } from 'lucide-react';
+import { useLicense } from './hooks/useLicense'; // <--- IMPORTAR HOOK
 
 import { 
   subscribeBookings, subscribeCourts, subscribeProducts, subscribeConfig, subscribeUsers, subscribeActivity, subscribeExpenses,
@@ -41,8 +43,8 @@ const NotificationToast = ({ message, onClose }: { message: string | null, onClo
     );
 };
 
-// --- APP COMPONENT ---
 const App = () => {
+  const { isLocked, loading: loadingLicense } = useLicense(); // <--- CONSUMIR HOOK
   const [user, setUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [showLogin, setShowLogin] = useState(false);
@@ -91,24 +93,16 @@ const App = () => {
       if (type !== 'SYSTEM') showToast(desc); 
   };
   
-  // MODIFICADO: Soporte para eliminación de series de turnos fijos
   const handleUpdateStatus = async (id: string, s: BookingStatus) => {
       const bookingToDelete = bookings.find(b => b.id === id);
-      
       if (s === BookingStatus.CANCELLED && bookingToDelete?.seriesId) {
           if (window.confirm("¿Deseas eliminar todos los turnos futuros de esta serie semanal?")) {
-              const futureBookings = bookings.filter(b => 
-                  b.seriesId === bookingToDelete.seriesId && 
-                  b.date >= bookingToDelete.date &&
-                  b.status !== BookingStatus.CANCELLED
-              );
-              
+              const futureBookings = bookings.filter(b => b.seriesId === bookingToDelete.seriesId && b.date >= bookingToDelete.date && b.status !== BookingStatus.CANCELLED);
               await Promise.all(futureBookings.map(b => updateBookingStatus(b.id, BookingStatus.CANCELLED)));
               handleLogActivity('BOOKING', `Serie cancelada: ${bookingToDelete.customerName}`);
               return;
           }
       }
-      
       updateBookingStatus(id, s);
       handleLogActivity('BOOKING', `Estado actualizado: ${s}`);
   };
@@ -121,36 +115,23 @@ const App = () => {
       else { handleLogActivity('BOOKING', `Reserva modificada: ${b.customerName}`); }
   };
 
-  // MODIFICADO: Lógica para generar automáticamente 8 semanas de turnos fijos
   const handleAddBooking = async (booking: Booking) => { 
       if (booking.isRecurring) {
           const seriesId = `series-${Date.now()}`;
           const startDate = new Date(booking.date + 'T12:00:00');
           const batchCreations = [];
-
           for (let i = 0; i < 8; i++) {
               const nextDate = new Date(startDate);
               nextDate.setDate(startDate.getDate() + (i * 7));
               const dateString = nextDate.toISOString().split('T')[0];
-              
-              batchCreations.push(addBooking({
-                  ...booking,
-                  id: `b-${seriesId}-${i}`,
-                  date: dateString,
-                  status: BookingStatus.PENDING, // Siempre nacen pendientes para confirmar cada semana
-                  seriesId: seriesId
-              }));
+              batchCreations.push(addBooking({ ...booking, id: `b-${seriesId}-${i}`, date: dateString, status: BookingStatus.PENDING, seriesId: seriesId }));
           }
           await Promise.all(batchCreations);
           handleLogActivity('BOOKING', `Turno Fijo creado: ${booking.customerName} (8 semanas)`);
       } else {
           await addBooking(booking);
-          if (booking.status === BookingStatus.CONFIRMED && booking.paymentMethod) { 
-              handleLogActivity('BOOKING', `Nueva Reserva Pagada: ${booking.customerName}`, booking.price, booking.paymentMethod); 
-          }
-          else { 
-              handleLogActivity('BOOKING', `Nueva Reserva: ${booking.customerName}`, booking.price); 
-          }
+          if (booking.status === BookingStatus.CONFIRMED && booking.paymentMethod) { handleLogActivity('BOOKING', `Nueva Reserva Pagada: ${booking.customerName}`, booking.price, booking.paymentMethod); }
+          else { handleLogActivity('BOOKING', `Nueva Reserva: ${booking.customerName}`, booking.price); }
       }
   };
 
@@ -163,6 +144,40 @@ const App = () => {
   const handleUpdateUsers = (u: User[]) => updateUserList(u);
   const handleAddExpense = (e: Expense) => { addExpense(e); showToast('Gasto registrado'); };
   const handleDeleteExpense = (id: string) => { deleteExpense(id); showToast('Gasto eliminado'); };
+
+  // --- LÓGICA DE BLOQUEO POR SUSPENSIÓN ---
+  if (!loadingLicense && isLocked) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
+        <div className="max-w-md w-full bg-slate-900 border border-red-500/30 p-10 rounded-3xl shadow-2xl shadow-red-500/10 backdrop-blur-xl animate-in fade-in zoom-in-95">
+          <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/20">
+            <ShieldAlert className="text-red-500 w-10 h-10 animate-pulse" />
+          </div>
+          <h1 className="text-3xl font-black text-white mb-4 tracking-tighter">SERVICIO SUSPENDIDO</h1>
+          <p className="text-slate-400 leading-relaxed mb-8">
+            El acceso a esta plataforma de gestión ha sido restringido temporalmente por el administrador del sistema.
+          </p>
+          <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 mb-8">
+            <p className="text-xs text-slate-500 uppercase font-bold tracking-widest mb-1">Motivo posible</p>
+            <p className="text-sm text-red-400 font-medium italic">Regularización administrativa pendiente</p>
+          </div>
+          <p className="text-xs text-slate-600 font-medium">
+            Contacte a soporte técnico para restablecer el servicio.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- PANTALLA DE CARGA INICIAL ---
+  if (loadingLicense) {
+    return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
+            <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-slate-500 font-medium animate-pulse uppercase tracking-widest text-xs">Validando Licencia...</p>
+        </div>
+    );
+  }
 
   if (!user) {
     const theme = COLOR_THEMES[config.courtColorTheme];
@@ -191,16 +206,13 @@ const App = () => {
         <NotificationToast message={toast} onClose={() => setToast(null)} />
         <Layout activeView={activeView} onChangeView={setActiveView} config={config} role={user.role} onLogout={handleLogout}>
             {activeView === 'dashboard' && <Dashboard bookings={bookings} products={products} config={config} />}
-            {activeView === 'bookings' && <BookingModule bookings={bookings} courts={courts} config={config} onUpdateStatus={handleUpdateStatus} onToggleRecurring={handleToggleRecurring} onUpdateBooking={handleUpdateBooking} onAddBooking={handleAddBooking} />}
+            {activeView === 'bookings' && <BookingModule bookings={bookings} courts={courts} config={config} onUpdateStatus={handleUpdateStatus} onUpdateBooking={handleUpdateBooking} onAddBooking={handleAddBooking} />}
             {activeView === 'pos' && <POSModule products={products} config={config} onProcessSale={handleProcessSale} />}
             {activeView === 'inventory' && <InventoryModule products={products} config={config} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} />}
             {activeView === 'activity' && <ActivityModule activities={activities} config={config} />}
-            
             {activeView === 'cashbox' && <CashboxModule config={config} role={user.role} activities={activities} expenses={expenses} onLogActivity={handleLogActivity} />}
             {activeView === 'reports' && <ReportsModule bookings={bookings} activities={activities} expenses={expenses} onAddExpense={handleAddExpense} onDeleteExpense={handleDeleteExpense} />}
-            
             {activeView === 'settings' && <SettingsView config={config} courts={courts} users={users} onUpdateConfig={handleUpdateConfig} onUpdateCourts={handleUpdateCourts} onUpdateUsers={handleUpdateUsers} />}
-            
             {activeView === 'public' && <PublicBookingView config={config} courts={courts} bookings={bookings} onAddBooking={handleAddBooking} />}
         </Layout>
     </>
