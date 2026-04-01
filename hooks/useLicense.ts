@@ -1,22 +1,21 @@
-// ARCHIVO COMPLETO: src/hooks/useLicense.ts
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
-import { db } from '../firebaseConfig'; // Importación directa de la base de datos
+import { db } from '../firebaseConfig'; // Importación directa desde la configuración de Firebase
 
 /**
  * Hook para controlar el estado del servicio remoto (Kill Switch)
- * Sincronizado con la lógica de firestore.ts del proyecto
+ * Sincronizado con el Panel de Control SaaS mediante el ID: 79076092-0702-4cff-ad2b-ba8aaee65283
  */
 export const useLicense = () => {
   const [isLocked, setIsLocked] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Definimos las rutas exactas según figuran en firestore.ts
+    // Definimos las rutas de colecciones según la estructura del proyecto
     const CONFIG_COL = 'club_config';
     const CONFIG_DOC_ID = 'main_config';
 
-    // 1. Referencia al documento de configuración del club local
+    // 1. Referencia al documento de configuración local del club
     const configRef = doc(db, CONFIG_COL, CONFIG_DOC_ID);
 
     const checkStatus = async () => {
@@ -25,28 +24,21 @@ export const useLicense = () => {
         
         if (configSnap.exists()) {
           const configData = configSnap.data();
-          // Buscamos el ID del cliente (cuesta_padel) guardado en la base de datos local
-          const licenseKey = configData.licenseKey;
+          // Intentamos obtener el ID del campo 'licenseKey'. 
+          // Si no existe en la DB, usamos el proporcionado como respaldo.
+          const licenseKey = configData.licenseKey || "79076092-0702-4cff-ad2b-ba8aaee65283";
 
-          if (!licenseKey) {
-            console.error("LICENCIA: No se encontró el campo 'licenseKey' en club_config/main_config.");
-            setIsLocked(true); // Bloqueamos por falta de identificación
-            setLoading(false);
-            return;
-          }
-
-          // 2. Con la identidad confirmada, escuchamos la colección de administración del SaaS
-          // Buscamos en la colección global 'clients' el documento con ID 'cuesta_padel'
+          // 2. Escuchamos la colección global 'clients' en el Panel SaaS
           const clientRef = doc(db, 'clients', licenseKey);
           
           const unsubClient = onSnapshot(clientRef, (docSnapshot) => {
             if (docSnapshot.exists()) {
               const clientData = docSnapshot.data();
-              // El Kill Switch se activa si isActive es false en el Panel SaaS
+              // Bloqueamos la interfaz si 'isActive' es estrictamente falso en el SaaS
               setIsLocked(clientData.isActive === false);
-              console.log(`LICENCIA: Estado para ${licenseKey} es ${clientData.isActive ? 'Activo' : 'Suspendido'}`);
+              console.log(`LICENCIA: Estado para ${licenseKey} verificado: ${clientData.isActive ? 'Activo' : 'Suspendido'}`);
             } else {
-              // Si el ID no existe en el Panel SaaS, bloqueamos preventivamente
+              // Si el ID no existe en el Panel SaaS, bloqueamos por seguridad
               console.error(`LICENCIA: El ID ${licenseKey} no existe en el panel administrativo.`);
               setIsLocked(true);
             }
@@ -58,7 +50,7 @@ export const useLicense = () => {
 
           return unsubClient;
         } else {
-          console.error("LICENCIA: No se pudo leer la configuración local del club.");
+          console.error("LICENCIA: No se pudo leer la configuración local (main_config).");
           setIsLocked(true);
           setLoading(false);
         }
