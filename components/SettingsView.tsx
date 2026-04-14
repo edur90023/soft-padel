@@ -15,7 +15,6 @@ interface SettingsViewProps {
     onUpdateUsers: (u: User[]) => void;
 }
 
-// Función auxiliar para redimensionar imágenes y evitar el límite de 1MB de Firestore
 const processImage = (file: File): Promise<string> => {
     return new Promise((resolve) => {
         const reader = new FileReader();
@@ -25,14 +24,13 @@ const processImage = (file: File): Promise<string> => {
             img.src = event.target?.result as string;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 600; // Ancho máximo suficiente para logos y banners
+                const MAX_WIDTH = 600;
                 const scaleSize = MAX_WIDTH / img.width;
                 canvas.width = MAX_WIDTH;
                 canvas.height = img.height * scaleSize;
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    // Comprimimos a JPEG con calidad 0.7 para reducir drásticamente el peso
                     resolve(canvas.toDataURL('image/jpeg', 0.7)); 
                 } else {
                     resolve(event.target?.result as string);
@@ -52,8 +50,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
     const [editingCourt, setEditingCourt] = useState<Court | null>(null);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [userForm, setUserForm] = useState<User>({ id: '', name: '', username: '', password: '', role: 'OPERATOR' });
-
-    // --- HANDLERS ---
 
     const handleAdImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -150,7 +146,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
 
     return (
         <div className="max-w-6xl mx-auto space-y-6 pb-24 animate-in fade-in">
-            {/* Header de Pestañas */}
             <div className="bg-slate-900/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div><h2 className="text-2xl font-bold text-white flex items-center gap-2"><Settings className="text-blue-400" /> Configuración</h2></div>
                 <div className="flex bg-slate-800/50 p-1 rounded-lg border border-white/5 overflow-x-auto max-w-full">
@@ -174,8 +169,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
             </div>
 
             <div className="bg-slate-900/60 backdrop-blur-md p-8 rounded-2xl border border-white/10 min-h-[500px]">
-                
-                {/* PESTAÑA: GENERAL */}
                 {activeTab === 'general' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
                         <div className="space-y-6">
@@ -245,7 +238,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
                     </div>
                 )}
 
-                {/* PESTAÑA: CANCHAS */}
                 {activeTab === 'courts' && (
                     <div className="space-y-6 animate-in fade-in">
                         <div className="flex gap-2">
@@ -274,7 +266,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
                     </div>
                 )}
 
-                {/* PESTAÑA: HORARIOS */}
                 {activeTab === 'schedule' && (
                     <div className="space-y-6 animate-in fade-in">
                         <div className="bg-slate-800/50 p-6 rounded-xl border border-white/5">
@@ -316,7 +307,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
                     </div>
                 )}
 
-                {/* PESTAÑA: USUARIOS */}
                 {activeTab === 'users' && (
                     <div className="space-y-6 animate-in fade-in">
                         <div className="flex justify-between items-center mb-6">
@@ -343,7 +333,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
                     </div>
                 )}
 
-                {/* PESTAÑA: PUBLICIDAD */}
                 {activeTab === 'ads' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in">
                         <div className="lg:col-span-1 bg-slate-800/50 p-6 rounded-xl border border-white/5 space-y-4 h-fit">
@@ -379,7 +368,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
                     </div>
                 )}
                 
-                {/* PESTAÑA: PROMOS */}
                 {activeTab === 'promos' && (
                     <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in">
                         <div className="bg-slate-800/50 p-6 rounded-2xl border border-white/5 space-y-6">
@@ -398,7 +386,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
                 )}
             </div>
 
-            {/* MODALES */}
             {editingCourt && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl p-6">
@@ -433,4 +420,3 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
         </div>
     );
 };
-
