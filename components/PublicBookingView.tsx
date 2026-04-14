@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ChevronLeft, ChevronRight, User, Phone, CheckCircle, ArrowLeft, Calendar, 
-  Clock, MapPin, MessageCircle, ExternalLink, Moon, Map, X
+  Clock, MapPin, MessageCircle, ExternalLink, Moon, Map, X, Flame
 } from 'lucide-react';
 import { Court, Booking, ClubConfig, BookingStatus } from '../types';
 import { COLOR_THEMES } from '../constants';
@@ -53,9 +53,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
   const handleDateChange = (days: number) => {
     const d = new Date(selectedDate + 'T12:00:00');
     d.setDate(d.getDate() + days);
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    if (d < today) return;
+    if (d < new Date(new Date().setHours(0,0,0,0))) return;
     setSelectedDate(d.toISOString().split('T')[0]);
     setSelectedSlotIds([]);
     setSelectedCourtId(null);
@@ -88,20 +86,12 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
       return slots;
   }, [selectedDate, config.schedule]);
 
-  // --- FUNCIÓN RESTAURADA: getFreeCourtsForSlot ---
   const getFreeCourtsForSlot = (slot: TimeSlot): Court[] => {
       if (isTimeInPast(slot.realDate, slot.time)) return [];
       const slotDate = new Date(`${slot.realDate}T${slot.time}`);
       return courts.filter(court => {
           if (court.status === 'MAINTENANCE') return false;
-          const hasBooking = bookings.some(b => {
-             if (b.courtId !== court.id || b.status === BookingStatus.CANCELLED) return false;
-             const bStart = new Date(`${b.date}T${b.time}`);
-             const bEnd = new Date(bStart.getTime() + b.duration * 60000);
-             const slotEnd = new Date(slotDate.getTime() + 30 * 60000);
-             return bStart < slotEnd && bEnd > slotDate;
-          });
-          return !hasBooking;
+          return !bookings.some(b => b.courtId === court.id && b.status !== BookingStatus.CANCELLED && new Date(`${b.date}T${b.time}`) < new Date(slotDate.getTime() + 30 * 60000) && new Date(new Date(`${b.date}T${b.time}`).getTime() + b.duration * 60000) > slotDate);
       });
   };
 
@@ -113,14 +103,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
             const slot = generatedSlots.find(s => s.id === slotId);
             if (!slot) return false;
             const slotDate = new Date(`${slot.realDate}T${slot.time}`);
-            const hasBooking = bookings.some(b => {
-                if (b.courtId !== court.id || b.status === BookingStatus.CANCELLED) return false;
-                const bStart = new Date(`${b.date}T${b.time}`);
-                const bEnd = new Date(bStart.getTime() + b.duration * 60000);
-                const slotEnd = new Date(slotDate.getTime() + 30 * 60000);
-                return bStart < slotEnd && bEnd > slotDate;
-            });
-            return !hasBooking;
+            return !bookings.some(b => b.courtId === court.id && b.status !== BookingStatus.CANCELLED && new Date(`${b.date}T${b.time}`) < new Date(slotDate.getTime() + 30 * 60000) && new Date(new Date(`${b.date}T${b.time}`).getTime() + b.duration * 60000) > slotDate);
         });
     });
   }, [selectedSlotIds, courts, bookings, generatedSlots]);
@@ -135,24 +118,19 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
       }
   };
 
+  // --- LÓGICA DE PROMOCIÓN (RESTAURADA) ---
   const isPromoEligible = useMemo(() => {
       if (!config.promoActive || selectedSlotIds.length !== 4) return false;
       const sel = generatedSlots.filter(s => selectedSlotIds.includes(s.id));
       for (let i = 0; i < sel.length - 1; i++) {
-          if ((new Date(`${sel[i+1].realDate}T${sel[i+1].time}`).getTime() - new Date(`${sel[i].realDate}T${sel[i].time}`).getTime()) / 60000 !== 30) return false;
+          const current = new Date(`${sel[i].realDate}T${sel[i].time}`);
+          const next = new Date(`${sel[i+1].realDate}T${sel[i+1].time}`);
+          if ((next.getTime() - current.getTime()) / 60000 !== 30) return false;
       }
       return true;
   }, [selectedSlotIds, generatedSlots, config.promoActive]);
 
-  const calculateTotal = () => {
-      if (isPromoEligible && config.promoActive) return config.promoPrice;
-      if (!selectedCourtId) return 0;
-      const court = courts.find(c => c.id === selectedCourtId);
-      if (!court) return 0;
-      return Math.round(((court.basePrice / 3) * selectedSlotIds.length) / 100) * 100;
-  };
-
-  const totalPrice = calculateTotal();
+  const totalPrice = isPromoEligible ? config.promoPrice : selectedCourtId ? Math.round(((courts.find(c => c.id === selectedCourtId)?.basePrice || 0) / 3) * selectedSlotIds.length) : 0;
 
   const handleConfirmBooking = () => {
       const startSlot = generatedSlots.find(s => s.id === selectedSlotIds[0]);
@@ -163,11 +141,10 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
           customerPhone: customerData.phone, status: BookingStatus.PENDING, price: totalPrice, isRecurring: false
       });
       setStep('SUCCESS');
-      const msg = `Hola! Reserva en *${config.name}*%0A👤 *Cliente:* ${customerData.name}%0A📅 *Fecha:* ${startSlot.realDate}%0A⏰ *Hora:* ${startSlot.time}%0A🏟 *Cancha:* ${courts.find(c => c.id === selectedCourtId)?.name}%0A💰 *Total:* $${totalPrice.toLocaleString()}`;
+      const msg = `Hola! Reserva en *${config.name}*%0A👤 *Cliente:* ${customerData.name}%0A📅 *Fecha:* ${startSlot.realDate}%0A⏰ *Hora:* ${startSlot.time}%0A🏟 *Cancha:* ${courts.find(c => c.id === selectedCourtId)?.name}%0A💰 *Total:* $${totalPrice.toLocaleString()}${isPromoEligible ? `%0A🎁 *PROMO:* ${config.promoText}` : ''}`;
       setTimeout(() => window.open(`https://wa.me/${config.ownerPhone.replace('+', '')}?text=${msg}`, '_blank'), 500);
   };
 
-  // --- COMPONENTE DE PUBLICIDAD RESTAURADO ---
   const renderAd = () => {
     if (activeAds.length === 0) return null;
     const ad = activeAds[currentAdIndex];
@@ -300,10 +277,18 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
 
                     {/* FOOTER */}
                     {step !== 'DATE' && (
-                        <div className="bg-slate-900/80 backdrop-blur-md border-t border-white/5 p-6 md:px-10 flex items-center justify-between shrink-0">
-                            <div className="flex flex-col">
-                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Total a pagar</span>
-                                <span className="text-2xl font-bold text-white font-mono">${totalPrice.toLocaleString()}</span>
+                        <div className="bg-slate-900/80 backdrop-blur-md border-t border-white/5 p-6 md:px-10 flex flex-col md:flex-row gap-4 md:items-center justify-between shrink-0">
+                            <div className="flex items-center gap-6">
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Total a pagar</span>
+                                    <span className="text-2xl font-bold text-white font-mono">${totalPrice.toLocaleString()}</span>
+                                </div>
+                                {isPromoEligible && (
+                                    <div className="bg-orange-500/10 border border-orange-500/20 px-3 py-1 rounded-lg flex items-center gap-2 animate-pulse">
+                                        <Flame size={14} className="text-orange-500"/>
+                                        <span className="text-[10px] text-orange-400 font-bold uppercase tracking-tighter">{config.promoText}</span>
+                                    </div>
+                                )}
                             </div>
                             {step === 'FORM' ? 
                                 <button onClick={handleConfirmBooking} disabled={!customerData.name || !customerData.phone || !isAgreed} className="px-10 py-3.5 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl shadow-lg disabled:opacity-20 flex items-center gap-2 transition-all active:scale-95"><MessageCircle size={18}/> Reservar</button> :
