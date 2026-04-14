@@ -53,7 +53,9 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
   const handleDateChange = (days: number) => {
     const d = new Date(selectedDate + 'T12:00:00');
     d.setDate(d.getDate() + days);
-    if (d < new Date(new Date().setHours(0,0,0,0))) return;
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    if (d < today) return;
     setSelectedDate(d.toISOString().split('T')[0]);
     setSelectedSlotIds([]);
     setSelectedCourtId(null);
@@ -118,7 +120,6 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
       }
   };
 
-  // --- LÓGICA DE PROMOCIÓN (RESTAURADA) ---
   const isPromoEligible = useMemo(() => {
       if (!config.promoActive || selectedSlotIds.length !== 4) return false;
       const sel = generatedSlots.filter(s => selectedSlotIds.includes(s.id));
@@ -130,7 +131,18 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
       return true;
   }, [selectedSlotIds, generatedSlots, config.promoActive]);
 
-  const totalPrice = isPromoEligible ? config.promoPrice : selectedCourtId ? Math.round(((courts.find(c => c.id === selectedCourtId)?.basePrice || 0) / 3) * selectedSlotIds.length) : 0;
+  // --- LÓGICA DE PRECIO CORREGIDA: Valor cancha * bloques ---
+  const calculateTotal = () => {
+      if (isPromoEligible && config.promoActive) return config.promoPrice;
+      if (!selectedCourtId) return 0;
+      const court = courts.find(c => c.id === selectedCourtId);
+      if (!court) return 0;
+      
+      // Como el precio en config es por 30min, solo multiplicamos por la cantidad de slots elegidos
+      return court.basePrice * selectedSlotIds.length;
+  };
+
+  const totalPrice = calculateTotal();
 
   const handleConfirmBooking = () => {
       const startSlot = generatedSlots.find(s => s.id === selectedSlotIds[0]);
@@ -141,7 +153,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
           customerPhone: customerData.phone, status: BookingStatus.PENDING, price: totalPrice, isRecurring: false
       });
       setStep('SUCCESS');
-      const msg = `Hola! Reserva en *${config.name}*%0A👤 *Cliente:* ${customerData.name}%0A📅 *Fecha:* ${startSlot.realDate}%0A⏰ *Hora:* ${startSlot.time}%0A🏟 *Cancha:* ${courts.find(c => c.id === selectedCourtId)?.name}%0A💰 *Total:* $${totalPrice.toLocaleString()}${isPromoEligible ? `%0A🎁 *PROMO:* ${config.promoText}` : ''}`;
+      const msg = `Hola! Reserva en *${config.name}*%0A👤 *Cliente:* ${customerData.name}%0A📅 *Fecha:* ${startSlot.realDate}%0A⏰ *Hora:* ${startSlot.time}%0A⏳ *Duración:* ${selectedSlotIds.length * 30} min%0A🏟 *Cancha:* ${courts.find(c => c.id === selectedCourtId)?.name}%0A💰 *Total:* $${totalPrice.toLocaleString()}${isPromoEligible ? `%0A🎁 *PROMO:* ${config.promoText}` : ''}`;
       setTimeout(() => window.open(`https://wa.me/${config.ownerPhone.replace('+', '')}?text=${msg}`, '_blank'), 500);
   };
 
@@ -251,7 +263,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                                                     <div className={`p-3 rounded-xl ${selectedCourtId === court.id ? 'bg-blue-600' : 'bg-slate-800'}`}><MapPin size={20} className="text-white"/></div>
                                                     <div className="text-left"><span className="font-bold block text-base">{court.name}</span><span className="text-[10px] opacity-60 uppercase font-bold tracking-tighter">{court.type}</span></div>
                                                 </div>
-                                                <span className="font-bold text-lg font-mono">${court.basePrice.toLocaleString()}</span>
+                                                <span className="font-bold text-lg font-mono">${(court.basePrice * selectedSlotIds.length).toLocaleString()}</span>
                                             </button>
                                         ))
                                     }
