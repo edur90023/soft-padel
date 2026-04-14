@@ -81,7 +81,7 @@ const App = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [activities, setActivities] = useState<ActivityLogEntry[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [activeTabs, setActiveTabs] = useState<ActiveTab[]>([]); // <--- NUEVO ESTADO PARA CONSUMOS
+  const [activeTabs, setActiveTabs] = useState<ActiveTab[]>([]); 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -96,7 +96,7 @@ const App = () => {
     const unsubUsers = subscribeUsers(setUsers);
     const unsubActivity = subscribeActivity(setActivities);
     const unsubExpenses = subscribeExpenses(setExpenses);
-    const unsubTabs = subscribeActiveTabs(setActiveTabs); // <--- SUSCRIPCIÓN A CONSUMOS
+    const unsubTabs = subscribeActiveTabs(setActiveTabs);
 
     return () => {
         unsubBookings(); unsubCourts(); unsubProducts(); unsubConfig(); unsubUsers(); unsubActivity(); unsubExpenses(); unsubTabs();
@@ -157,13 +157,13 @@ const App = () => {
               
               await Promise.all(futureBookings.map(async (b) => {
                   updateBookingStatus(b.id, BookingStatus.CANCELLED);
-                  await clearActiveTab(b.courtId); // Limpia consumos de cada cancha en la serie
+                  await clearActiveTab(b.courtId); 
               }));
               handleLogActivity('BOOKING', `Serie cancelada: ${bRef.customerName}`);
               return;
           } else {
               await updateBookingStatus(id, s);
-              await clearActiveTab(bRef.courtId); // Limpia consumos de la cancha individual
+              await clearActiveTab(bRef.courtId);
           }
       } else {
           updateBookingStatus(id, s);
@@ -213,11 +213,16 @@ const App = () => {
           handleLogActivity('BOOKING', `Turno Fijo creado: ${booking.customerName} (8 semanas)`);
       } else {
           await addBooking(booking);
+          
+          // --- CORRECCIÓN FINANCIERA IMPORTANTE ---
           if (booking.status === BookingStatus.CONFIRMED && booking.paymentMethod) { 
+              // Si la reserva se crea ya pagada y confirmada, SI registramos el ingreso
               handleLogActivity('BOOKING', `Nueva Reserva Pagada: ${booking.customerName}`, booking.price, booking.paymentMethod); 
           }
           else { 
-              handleLogActivity('BOOKING', `Nueva Reserva: ${booking.customerName}`, booking.price); 
+              // Si la reserva entra como "Pendiente" (ej: desde la web pública o admin manual), NO enviamos booking.price
+              // De esta manera, el ingreso es $0 hasta que se cobre realmente.
+              handleLogActivity('BOOKING', `Nueva Reserva: ${booking.customerName}`); 
           }
       }
   };
