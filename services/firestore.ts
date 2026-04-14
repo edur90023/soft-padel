@@ -1,6 +1,6 @@
 import { db } from '../firebaseConfig';
 import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, getDocs, writeBatch, where, limit, getDoc } from 'firebase/firestore';
-import { Booking, Product, Court, User, ActivityLogEntry, ClubConfig, BookingStatus, Expense, MonthlySummary } from '../types';
+import { Booking, Product, Court, User, ActivityLogEntry, ClubConfig, BookingStatus, Expense, MonthlySummary, ActiveTab } from '../types';
 import { MOCK_USERS, MOCK_COURTS, INITIAL_CONFIG } from '../constants';
 
 const BOOKINGS_COL = 'bookings';
@@ -11,9 +11,9 @@ const ACTIVITY_COL = 'activity_logs';
 const EXPENSES_COL = 'expenses';
 const CONFIG_COL = 'club_config';
 const SUMMARIES_COL = 'monthly_summaries';
+const TABS_COL = 'active_tabs'; // Nueva colección
 const CONFIG_DOC_ID = 'main_config';
 
-// --- HELPERS ---
 const sanitize = (data: any): any => {
     if (!data || typeof data !== 'object') return data;
     if (data instanceof Date) return data.toISOString();
@@ -47,12 +47,7 @@ const deserializeConfig = (data: any): ClubConfig => {
         }
         config.schedule = scheduleArray;
     }
-    
-    // CORRECCIÓN CRÍTICA: Se cambia la validación para permitir Alias vacíos
-    if (config.mpAlias === undefined || config.mpAlias === null) {
-        config.mpAlias = INITIAL_CONFIG.mpAlias || '';
-    }
-    
+    if (config.mpAlias === undefined || config.mpAlias === null) config.mpAlias = INITIAL_CONFIG.mpAlias || '';
     return config;
 };
 
@@ -85,6 +80,26 @@ export const addBooking = async (booking: Booking) => {
 export const updateBooking = async (b: Booking) => updateDoc(doc(db, BOOKINGS_COL, b.id), sanitize(b));
 export const updateBookingStatus = async (id: string, status: BookingStatus) => updateDoc(doc(db, BOOKINGS_COL, id), { status });
 export const toggleBookingRecurring = async (id: string, v: boolean) => updateDoc(doc(db, BOOKINGS_COL, id), { isRecurring: !v });
+
+// --- CONSUMOS (ACTIVE TABS) ---
+export const subscribeActiveTabs = (callback: (tabs: ActiveTab[]) => void) => {
+    return onSnapshot(collection(db, TABS_COL), (snapshot) => {
+        callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActiveTab)));
+    });
+};
+
+export const updateActiveTab = async (courtId: string, items: any[]) => {
+    if (items.length === 0) {
+        await deleteDoc(doc(db, TABS_COL, courtId));
+    } else {
+        await setDoc(doc(db, TABS_COL, courtId), {
+            items: sanitize(items),
+            lastUpdated: new Date().toISOString()
+        });
+    }
+};
+
+export const clearActiveTab = async (courtId: string) => deleteDoc(doc(db, TABS_COL, courtId));
 
 // --- PRODUCTS ---
 export const subscribeProducts = (cb: (d: Product[]) => void) => onSnapshot(query(collection(db, PRODUCTS_COL), orderBy('name')), (s) => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Product))));
@@ -129,7 +144,7 @@ export const subscribeExpenses = (cb: (d: Expense[]) => void) => onSnapshot(quer
 export const addExpense = async (e: Expense) => { const { id, ...r } = sanitize(e); await addDoc(collection(db, EXPENSES_COL), r); };
 export const deleteExpense = async (id: string) => deleteDoc(doc(db, EXPENSES_COL, id));
 
-// --- MANTENIMIENTO Y RESÚMENES ---
+// --- MANTENIMIENTO ---
 export const subscribeSummaries = (callback: (data: MonthlySummary[]) => void) => {
     const q = query(collection(db, SUMMARIES_COL), orderBy('id', 'desc'));
     return onSnapshot(q, (snapshot) => {
@@ -143,8 +158,6 @@ export const runMaintenance = async () => {
     cutoffDate.setDate(cutoffDate.getDate() - 15); 
     const cutoffStr = cutoffDate.toISOString();
 
-    console.log("🔄 Iniciando mantenimiento...");
-
     try {
         const oldLogsQuery = query(
             collection(db, ACTIVITY_COL),
@@ -153,10 +166,7 @@ export const runMaintenance = async () => {
         );
         
         const snapshot = await getDocs(oldLogsQuery);
-        if (snapshot.empty) {
-            console.log("✅ No hay registros viejos para limpiar.");
-            return;
-        }
+        if (snapshot.empty) return;
 
         const batch = writeBatch(db);
         const summariesCache: { [key: string]: MonthlySummary } = {};
@@ -169,7 +179,6 @@ export const runMaintenance = async () => {
             if (!summariesCache[monthKey]) {
                 const summaryRef = doc(db, SUMMARIES_COL, monthKey);
                 const summarySnap = await getDoc(summaryRef);
-                
                 if (summarySnap.exists()) {
                     summariesCache[monthKey] = summarySnap.data() as MonthlySummary;
                 } else {
@@ -184,27 +193,20 @@ export const runMaintenance = async () => {
                     };
                 }
             }
-
-            if (data.amount) {
-                if (data.type === 'SALE' || data.type === 'BOOKING') {
-                    summariesCache[monthKey].totalIncome += data.amount;
-                }
+            if (data.amount && (data.type === 'SALE' || data.type === 'BOOKING')) {
+                summariesCache[monthKey].totalIncome += data.amount;
             }
             summariesCache[monthKey].operationCount += 1;
             batch.delete(docSnap.ref);
         }
-
         Object.values(summariesCache).forEach(summary => {
             const ref = doc(db, SUMMARIES_COL, summary.id);
             summary.lastUpdated = new Date().toISOString();
             batch.set(ref, summary);
         });
-
         await batch.commit();
-        console.log(`🧹 Mantenimiento completado: ${snapshot.size} registros compactados.`);
-
     } catch (error) {
-        console.error("❌ Error en mantenimiento:", error);
+        console.error("Error mantenimiento:", error);
     }
 };
 
@@ -214,5 +216,5 @@ export const seedDatabase = async () => {
         if (uSnap.empty) for (const u of MOCK_USERS) await setDoc(doc(db, USERS_COL, u.id), sanitize(u));
         const cSnap = await getDocs(collection(db, COURTS_COL));
         if (cSnap.empty) for (const c of MOCK_COURTS) await setDoc(doc(db, COURTS_COL, c.id), sanitize(c));
-    } catch (e) { console.error("Error seeding", e); }
+    } catch (e) {}
 };
