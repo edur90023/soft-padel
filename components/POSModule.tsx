@@ -8,10 +8,10 @@ import { createCartPreference } from '../services/mercadopago';
 interface POSModuleProps {
   products: Product[];
   config: ClubConfig;
-  courts: Court[]; // <--- Nueva prop
-  activeTabs: ActiveTab[]; // <--- Nueva prop
+  courts: Court[]; // Nueva prop para asignar consumos
+  activeTabs: ActiveTab[]; // Nueva prop para ver cuentas abiertas
   onProcessSale: (items: CartItem[], total: number, method: PaymentMethod) => void;
-  onUpdateActiveTab: (courtId: string, items: CartItem[]) => void; // <--- Nueva prop
+  onUpdateActiveTab: (courtId: string, items: CartItem[]) => void; // Nueva prop para persistencia
 }
 
 const formatMoney = (amount?: number | null) => {
@@ -22,13 +22,13 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedCourtId, setSelectedCourtId] = useState<string>(''); // Estado para el selector de cancha
+  const [selectedCourtId, setSelectedCourtId] = useState<string>(''); // Manejo de la cancha seleccionada
   
-  // LÓGICA DE CÓDIGO DE BARRAS (Preservada íntegra del original)
+  // LÓGICA DE CÓDIGO DE BARRAS (Original preservada íntegra)
   const barcodeBuffer = useRef<string>('');
   const lastKeyTime = useRef<number>(0);
 
-  // Payment Modal State (Preservado íntegro del original)
+  // Payment Modal State (Original preservado íntegro)
   const [paymentModal, setPaymentModal] = useState<{ isOpen: boolean, type: PaymentMethod | null }>({ isOpen: false, type: null });
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [isLoadingQr, setIsLoadingQr] = useState(false);
@@ -92,7 +92,7 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
         const maxStock = original ? original.stock : item.stock;
         const newQty = item.quantity + delta;
         if (delta > 0 && newQty > maxStock) { alert(`No puedes superar el stock (${maxStock})`); return item; }
-        return { ...item, quantity: Math.max(1, newQty) };
+        return { ...item, quantity: Math.max(1, newQty) }; // Corregido para permitir bajar cantidad
       }
       return item;
     }));
@@ -106,10 +106,10 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
 
   const filteredProducts = products.filter(p => 
     (selectedCategory === 'all' || p.category === selectedCategory) &&
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || (p.barcode && p.barcode.includes(searchTerm)))
   );
 
-  // --- NUEVA LÓGICA: GUARDAR EN CANCHA ---
+  // --- LÓGICA DE PERSISTENCIA POR CANCHA ---
   const handleSaveToCourt = () => {
     if (!selectedCourtId) return alert("Selecciona una cancha");
     if (cart.length === 0) return alert("El carrito está vacío");
@@ -118,7 +118,6 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
     let newItems = [...cart];
     
     if (existingTab) {
-        // Combinar items nuevos con los que ya estaban en la cancha
         existingTab.items.forEach(oldItem => {
             const index = newItems.findIndex(i => i.id === oldItem.id);
             if (index !== -1) {
@@ -135,7 +134,6 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
     alert("Consumos guardados en la cuenta de la cancha.");
   };
 
-  // --- NUEVA LÓGICA: CARGAR DESDE CANCHA ---
   const loadTab = (tab: ActiveTab) => {
       if (cart.length > 0 && !confirm("Se reemplazará el carrito actual con los consumos de la cancha. ¿Continuar?")) return;
       setCart(tab.items);
@@ -157,8 +155,7 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
   const confirmModalPayment = () => {
       if (paymentModal.type) {
           onProcessSale(cart, finalTotal, paymentModal.type);
-          // Si estábamos cobrando la cuenta de una cancha, la limpiamos
-          if (selectedCourtId) onUpdateActiveTab(selectedCourtId, []);
+          if (selectedCourtId) onUpdateActiveTab(selectedCourtId, []); 
           setCart([]);
           setPaymentModal({ isOpen: false, type: null });
           setSelectedCourtId('');
@@ -168,7 +165,7 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-100px)] gap-6 animate-in fade-in duration-500">
       
-      {/* Product Catalog (Estructura original preservada) */}
+      {/* Product Catalog */}
       <div className="flex-1 flex flex-col bg-slate-900/60 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl overflow-hidden">
         <div className="p-4 border-b border-white/10 space-y-4">
             <div className="flex items-center gap-4">
@@ -216,7 +213,7 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
             </div>
         </div>
 
-        {/* --- NUEVO PANEL: CUENTAS ABIERTAS POR CANCHA --- */}
+        {/* PANEL DE CUENTAS ABIERTAS (Nueva sección visual) */}
         {activeTabs.length > 0 && (
             <div className="p-4 bg-blue-600/10 border-t border-white/10">
                 <h3 className="text-xs font-bold text-blue-400 uppercase mb-3 flex items-center gap-2">
@@ -247,7 +244,7 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
         )}
       </div>
 
-      {/* Cart Sidebar (Estructura original preservada) */}
+      {/* Cart Sidebar */}
       <div className="w-full lg:w-[400px] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden">
         <div className="p-5 bg-slate-100 border-b border-slate-200 flex justify-between items-center">
             <h2 className="text-slate-800 font-bold text-xl flex items-center gap-2"><ShoppingCart className="text-slate-600"/> Carrito</h2>
@@ -279,10 +276,10 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
             )}
         </div>
 
-        {/* Totals & Pay & ASIGNACIÓN A CANCHA */}
+        {/* Totals & Pay & New Assignment Logic */}
         <div className="p-6 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] space-y-4">
             
-            {/* --- NUEVA SECCIÓN: ASIGNAR A CANCHA --- */}
+            {/* ASIGNAR A CANCHA */}
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <label className="text-[10px] font-black text-slate-400 uppercase block mb-2 ml-1">Dejar consumo pendiente</label>
                 <div className="flex gap-2">
@@ -300,7 +297,6 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
                         onClick={handleSaveToCourt} 
                         disabled={!selectedCourtId || cart.length === 0} 
                         className="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-lg disabled:opacity-30 transition-all shadow-md flex items-center justify-center active:scale-95"
-                        title="Guardar en la cancha"
                     >
                         <Plus size={20}/>
                     </button>
@@ -316,7 +312,7 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
         </div>
       </div>
 
-      {/* --- PAYMENT MODAL (DISEÑO ORIGINAL PRESERVADO) --- */}
+      {/* --- PAYMENT MODAL (Preservado íntegro del original) --- */}
       {paymentModal.isOpen && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
               <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative">
@@ -366,7 +362,7 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
                                       alt="QR de Pago" 
                                       className="w-48 h-48 object-contain"
                                   />
-                                  <p className="text-black/50 text-[10px] text-center mt-2 font-mono">Escanea con Mercado Pago</p>
+                                  <p className="text-black/50 text-[10px] text-center mt-2 font-mono uppercase">Escanea con Mercado Pago</p>
                               </>
                           ) : (
                               <p className="text-red-500 text-xs font-bold text-center p-4">
