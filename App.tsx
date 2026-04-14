@@ -11,19 +11,19 @@ import { ReportsModule } from './components/ReportsModule';
 import { SettingsView } from './components/SettingsView';
 
 import { INITIAL_CONFIG, COLOR_THEMES } from './constants';
-import { User, Booking, Product, ClubConfig, Court, ActivityLogEntry, BookingStatus, PaymentMethod, CartItem, ActivityType, Expense } from './types';
-import { ArrowLeft, LayoutGrid, Lock, Bell, X, ShieldAlert } from 'lucide-react';
+import { User, Booking, Product, ClubConfig, Court, ActivityLogEntry, BookingStatus, PaymentMethod, CartItem, ActivityType, Expense, ActiveTab } from './types';
+import { ArrowLeft, LayoutGrid, Lock, Bell, X, ShieldAlert, Loader2 } from 'lucide-react';
 
 // --- IMPORTACIONES DE SEGURIDAD Y LICENCIA ---
 import { useLicense } from './hooks/useLicense';
 
 import { 
-  subscribeBookings, subscribeCourts, subscribeProducts, subscribeConfig, subscribeUsers, subscribeActivity, subscribeExpenses,
+  subscribeBookings, subscribeCourts, subscribeProducts, subscribeConfig, subscribeUsers, subscribeActivity, subscribeExpenses, subscribeActiveTabs,
   addBooking, updateBooking, updateBookingStatus, toggleBookingRecurring,
   addProduct, updateProduct, deleteProduct, updateStock,
   updateConfig, updateCourtsList, updateUserList,
   logActivity as logActivityService, seedDatabase,
-  addExpense, deleteExpense
+  addExpense, deleteExpense, updateActiveTab, clearActiveTab
 } from './services/firestore';
 
 // --- SONIDO DE NOTIFICACIÓN ---
@@ -81,6 +81,7 @@ const App = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [activities, setActivities] = useState<ActivityLogEntry[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [activeTabs, setActiveTabs] = useState<ActiveTab[]>([]); // <--- NUEVO ESTADO PARA CONSUMOS
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -95,23 +96,46 @@ const App = () => {
     const unsubUsers = subscribeUsers(setUsers);
     const unsubActivity = subscribeActivity(setActivities);
     const unsubExpenses = subscribeExpenses(setExpenses);
+    const unsubTabs = subscribeActiveTabs(setActiveTabs); // <--- SUSCRIPCIÓN A CONSUMOS
 
     return () => {
-        unsubBookings(); unsubCourts(); unsubProducts(); unsubConfig(); unsubUsers(); unsubActivity(); unsubExpenses();
+        unsubBookings(); unsubCourts(); unsubProducts(); unsubConfig(); unsubUsers(); unsubActivity(); unsubExpenses(); unsubTabs();
     };
   }, []);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
-  const playNotificationSound = () => { try { const audio = new Audio(NOTIFICATION_SOUND); audio.volume = 0.5; const p = audio.play(); if(p !== undefined) p.catch(() => {}); } catch(e) {} };
+  
+  const playNotificationSound = () => { 
+    try { 
+        const audio = new Audio(NOTIFICATION_SOUND); 
+        audio.volume = 0.5; 
+        const p = audio.play(); 
+        if(p !== undefined) p.catch(() => {}); 
+    } catch(e) {} 
+  };
+
   const handleNewBookingIncoming = (nb: Booking) => { playNotificationSound(); showToast(`Nueva Reserva: ${nb.customerName}`); };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const foundUser = users.find(u => u.username === username && u.password === password);
-    if (foundUser) { setUser(foundUser); setLoginError(''); handleLogActivity('SYSTEM', `Inicio de sesión: ${foundUser.username}`); playNotificationSound(); } 
+    if (foundUser) { 
+        setUser(foundUser); 
+        setLoginError(''); 
+        handleLogActivity('SYSTEM', `Inicio de sesión: ${foundUser.username}`); 
+        playNotificationSound(); 
+    } 
     else { setLoginError('Credenciales incorrectas'); }
   };
-  const handleLogout = () => { handleLogActivity('SYSTEM', `Cierre de sesión: ${user?.username}`); setUser(null); setUsername(''); setPassword(''); setActiveView('dashboard'); setShowLogin(false); };
+
+  const handleLogout = () => { 
+    handleLogActivity('SYSTEM', `Cierre de sesión: ${user?.username}`); 
+    setUser(null); 
+    setUsername(''); 
+    setPassword(''); 
+    setActiveView('dashboard'); 
+    setShowLogin(false); 
+  };
   
   const handleLogActivity = (type: ActivityType, desc: string, amt?: number, method?: PaymentMethod) => { 
       const l: ActivityLogEntry = { id: Date.now().toString(), type, description: desc, timestamp: new Date().toISOString(), user: user?.username || 'Sistema', amount: amt, method }; 
@@ -120,32 +144,50 @@ const App = () => {
   };
   
   const handleUpdateStatus = async (id: string, s: BookingStatus) => {
-      const bookingToDelete = bookings.find(b => b.id === id);
+      const bRef = bookings.find(b => b.id === id);
       
-      if (s === BookingStatus.CANCELLED && bookingToDelete?.seriesId) {
-          if (window.confirm("¿Deseas eliminar todos los turnos futuros de esta serie semanal?")) {
+      // LOGICA DE LIMPIEZA AL CANCELAR
+      if (s === BookingStatus.CANCELLED && bRef) {
+          if (bRef.seriesId && window.confirm("¿Deseas eliminar todos los turnos futuros de esta serie semanal y sus consumos?")) {
               const futureBookings = bookings.filter(b => 
-                  b.seriesId === bookingToDelete.seriesId && 
-                  b.date >= bookingToDelete.date &&
+                  b.seriesId === bRef.seriesId && 
+                  b.date >= bRef.date &&
                   b.status !== BookingStatus.CANCELLED
               );
               
-              await Promise.all(futureBookings.map(b => updateBookingStatus(b.id, BookingStatus.CANCELLED)));
-              handleLogActivity('BOOKING', `Serie cancelada: ${bookingToDelete.customerName}`);
+              await Promise.all(futureBookings.map(async (b) => {
+                  updateBookingStatus(b.id, BookingStatus.CANCELLED);
+                  await clearActiveTab(b.courtId); // Limpia consumos de cada cancha en la serie
+              }));
+              handleLogActivity('BOOKING', `Serie cancelada: ${bRef.customerName}`);
               return;
+          } else {
+              await updateBookingStatus(id, s);
+              await clearActiveTab(bRef.courtId); // Limpia consumos de la cancha individual
           }
+      } else {
+          updateBookingStatus(id, s);
       }
       
-      updateBookingStatus(id, s);
       handleLogActivity('BOOKING', `Estado actualizado: ${s}`);
   };
 
-  const handleToggleRecurring = (id: string) => { const b = bookings.find(b => b.id === id); if(b) toggleBookingRecurring(id, b.isRecurring); };
+  const handleToggleRecurring = (id: string) => { 
+      const b = bookings.find(b => b.id === id); 
+      if(b) toggleBookingRecurring(id, b.isRecurring); 
+  };
   
-  const handleUpdateBooking = (b: Booking) => { 
+  const handleUpdateBooking = async (b: Booking) => { 
       updateBooking(b); 
-      if (b.status === BookingStatus.CONFIRMED && b.paymentMethod) { handleLogActivity('BOOKING', `Cobro Reserva: ${b.customerName}`, b.price, b.paymentMethod); }
-      else { handleLogActivity('BOOKING', `Reserva modificada: ${b.customerName}`); }
+      // Si se confirma la reserva (pago), limpiamos los consumos pendientes de esa cancha
+      if (b.status === BookingStatus.CONFIRMED) {
+          await clearActiveTab(b.courtId);
+          if (b.paymentMethod) {
+              handleLogActivity('BOOKING', `Cobro Reserva: ${b.customerName}`, b.price, b.paymentMethod);
+          }
+      } else {
+          handleLogActivity('BOOKING', `Reserva modificada: ${b.customerName}`);
+      }
   };
 
   const handleAddBooking = async (booking: Booking) => { 
@@ -180,7 +222,14 @@ const App = () => {
       }
   };
 
-  const handleProcessSale = (items: CartItem[], total: number, method: PaymentMethod) => { items.forEach(i => { const p = products.find(pr => pr.id === i.id); if(p) updateStock(p.id, p.stock - i.quantity); }); handleLogActivity('SALE', `Venta POS (${items.length} items) - ${method}`, total, method); };
+  const handleProcessSale = (items: CartItem[], total: number, method: PaymentMethod) => { 
+      items.forEach(i => { 
+          const p = products.find(pr => pr.id === i.id); 
+          if(p) updateStock(p.id, p.stock - i.quantity); 
+      }); 
+      handleLogActivity('SALE', `Venta POS (${items.length} items) - ${method}`, total, method); 
+  };
+
   const handleAddProduct = (p: Product) => { addProduct(p); handleLogActivity('STOCK', `Producto agregado: ${p.name}`); };
   const handleUpdateProduct = (p: Product) => { updateProduct(p); handleLogActivity('STOCK', `Producto actualizado: ${p.name}`); };
   const handleDeleteProduct = (id: string) => { deleteProduct(id); handleLogActivity('STOCK', `Producto eliminado`); };
@@ -194,7 +243,7 @@ const App = () => {
   if (licenseLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <Loader2 className="animate-spin text-blue-500" size={48} />
       </div>
     );
   }
@@ -212,10 +261,22 @@ const App = () => {
                 <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient} opacity-50`}></div>
                 <div className="bg-slate-900 border border-white/10 p-8 rounded-2xl w-full max-w-md shadow-2xl relative z-10 backdrop-blur-xl animate-in fade-in zoom-in-95">
                     <button onClick={() => setShowLogin(false)} className="absolute top-4 left-4 text-slate-400 hover:text-white flex items-center gap-1 text-xs font-bold"><ArrowLeft size={16}/> Volver</button>
-                    <div className="text-center mb-8 mt-4"><div className={`w-16 h-16 ${theme.primary} rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20`}>{config.logoUrl ? <img src={config.logoUrl} className="w-full h-full object-cover rounded-2xl"/> : <LayoutGrid className="text-white h-8 w-8" />}</div><h1 className="text-2xl font-bold text-white">{config.name}</h1><p className="text-slate-400">Acceso Administrativo</p></div>
+                    <div className="text-center mb-8 mt-4">
+                        <div className={`w-16 h-16 ${theme.primary} rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20`}>
+                            {config.logoUrl ? <img src={config.logoUrl} className="w-full h-full object-cover rounded-2xl"/> : <LayoutGrid className="text-white h-8 w-8" />}
+                        </div>
+                        <h1 className="text-2xl font-bold text-white">{config.name}</h1>
+                        <p className="text-slate-400">Acceso Administrativo</p>
+                    </div>
                     <form onSubmit={handleLogin} className="space-y-4">
-                        <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Usuario</label><input type="text" value={username} onChange={e => setUsername(e.target.value)} className="w-full bg-slate-800 border border-white/10 rounded-xl p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Ingrese su usuario"/></div>
-                        <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Contraseña</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-slate-800 border border-white/10 rounded-xl p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Ingrese su contraseña"/></div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Usuario</label>
+                            <input type="text" value={username} onChange={e => setUsername(e.target.value)} className="w-full bg-slate-800 border border-white/10 rounded-xl p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Ingrese su usuario"/>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Contraseña</label>
+                            <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-slate-800 border border-white/10 rounded-xl p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Ingrese su contraseña"/>
+                        </div>
                         {loginError && <p className="text-red-400 text-sm text-center">{loginError}</p>}
                         <button type="submit" className={`w-full ${theme.primary} text-white font-bold py-3 rounded-xl shadow-lg hover:opacity-90 transition-all active:scale-95`}>Ingresar</button>
                     </form>
@@ -223,7 +284,12 @@ const App = () => {
             </div>
         );
     }
-    return <div className="relative h-screen w-full"><PublicBookingView config={config} courts={courts} bookings={bookings} onAddBooking={handleAddBooking} /><button onClick={() => setShowLogin(true)} className="absolute top-4 right-4 z-50 p-2 text-white/10 hover:text-white/50 transition-colors rounded-full" title="Acceso Admin"><Lock size={16}/></button></div>;
+    return (
+        <div className="relative h-screen w-full">
+            <PublicBookingView config={config} courts={courts} bookings={bookings} onAddBooking={handleAddBooking} />
+            <button onClick={() => setShowLogin(true)} className="absolute top-4 right-4 z-50 p-2 text-white/10 hover:text-white/50 transition-colors rounded-full" title="Acceso Admin"><Lock size={16}/></button>
+        </div>
+    );
   }
 
   return (
@@ -232,7 +298,7 @@ const App = () => {
         <Layout activeView={activeView} onChangeView={setActiveView} config={config} role={user.role} onLogout={handleLogout}>
             {activeView === 'dashboard' && <Dashboard bookings={bookings} products={products} config={config} />}
             {activeView === 'bookings' && <BookingModule bookings={bookings} courts={courts} config={config} onUpdateStatus={handleUpdateStatus} onUpdateBooking={handleUpdateBooking} onAddBooking={handleAddBooking} />}
-            {activeView === 'pos' && <POSModule products={products} config={config} onProcessSale={handleProcessSale} />}
+            {activeView === 'pos' && <POSModule products={products} config={config} courts={courts} activeTabs={activeTabs} onProcessSale={handleProcessSale} onUpdateActiveTab={updateActiveTab} />}
             {activeView === 'inventory' && <InventoryModule products={products} config={config} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onDeleteProduct={handleDeleteProduct} />}
             {activeView === 'activity' && <ActivityModule activities={activities} config={config} />}
             
