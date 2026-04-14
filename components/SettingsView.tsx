@@ -433,3 +433,4 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
         </div>
     );
 };
+
