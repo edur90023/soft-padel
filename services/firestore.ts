@@ -54,6 +54,7 @@ const deserializeConfig = (data: any): ClubConfig => {
 
 // --- BOOKINGS ---
 export const subscribeBookings = (callback: (data: Booking[]) => void, onNewBooking?: (booking: Booking) => void) => {
+    // Limitamos reservas para no traer histórico infinito si no es necesario (opcional, aquí traigo todo para el calendario)
     const q = query(collection(db, BOOKINGS_COL));
     let isFirstLoad = true;
     return onSnapshot(q, (snapshot) => {
@@ -132,8 +133,9 @@ export const subscribeConfig = (callback: (data: ClubConfig) => void) => {
 };
 export const updateConfig = async (config: ClubConfig) => setDoc(doc(db, CONFIG_COL, CONFIG_DOC_ID), serializeConfig(config));
 
-// --- ACTIVITY ---
+// --- ACTIVITY (OPTIMIZADO) ---
 export const subscribeActivity = (cb: (d: ActivityLogEntry[]) => void) => {
+    // AHORA SOLO TRAE LOS ÚLTIMOS 500 REGISTROS para mayor profundidad en historial
     const q = query(collection(db, ACTIVITY_COL), orderBy('timestamp', 'desc'), limit(500));
     return onSnapshot(q, (s) => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as ActivityLogEntry))));
 };
@@ -154,7 +156,7 @@ export const subscribeSummaries = (callback: (data: MonthlySummary[]) => void) =
     });
 };
 
-// NUEVA FUNCIÓN: BORRADO TOTAL DE FINANZAS
+// --- NUEVA FUNCIÓN: BORRADO TOTAL DE FINANZAS PARA REINICIO ---
 export const resetFinancialData = async () => {
     const batch = writeBatch(db);
     
@@ -170,7 +172,7 @@ export const resetFinancialData = async () => {
     const summariesSnap = await getDocs(collection(db, SUMMARIES_COL));
     summariesSnap.forEach(d => batch.delete(d.ref));
 
-    // 4. Borrar Cuentas Abiertas
+    // 4. Borrar Cuentas Abiertas si las hubiera
     const tabsSnap = await getDocs(collection(db, TABS_COL));
     tabsSnap.forEach(d => batch.delete(d.ref));
 
@@ -182,6 +184,8 @@ export const runMaintenance = async () => {
     cutoffDate.setDate(cutoffDate.getDate() - 15); 
     const cutoffStr = cutoffDate.toISOString();
 
+    console.log("🔄 Iniciando mantenimiento...");
+
     try {
         const oldLogsQuery = query(
             collection(db, ACTIVITY_COL),
@@ -190,7 +194,10 @@ export const runMaintenance = async () => {
         );
         
         const snapshot = await getDocs(oldLogsQuery);
-        if (snapshot.empty) return;
+        if (snapshot.empty) {
+            console.log("✅ No hay registros viejos para limpiar.");
+            return;
+        }
 
         const batch = writeBatch(db);
         const summariesCache: { [key: string]: MonthlySummary } = {};
@@ -219,8 +226,10 @@ export const runMaintenance = async () => {
                 }
             }
 
-            if (data.amount && (data.type === 'SALE' || data.type === 'BOOKING')) {
-                summariesCache[monthKey].totalIncome += data.amount;
+            if (data.amount) {
+                if (data.type === 'SALE' || data.type === 'BOOKING') {
+                    summariesCache[monthKey].totalIncome += data.amount;
+                }
             }
             summariesCache[monthKey].operationCount += 1;
             batch.delete(docSnap.ref);
@@ -233,16 +242,19 @@ export const runMaintenance = async () => {
         });
 
         await batch.commit();
+        console.log(`🧹 Mantenimiento completado: ${snapshot.size} registros compactados.`);
+
     } catch (error) {
-        console.error("Error en mantenimiento:", error);
+        console.error("❌ Error en mantenimiento:", error);
     }
 };
 
+// --- SEED ---
 export const seedDatabase = async () => {
     try {
         const uSnap = await getDocs(collection(db, USERS_COL));
         if (uSnap.empty) for (const u of MOCK_USERS) await setDoc(doc(db, USERS_COL, u.id), sanitize(u));
         const cSnap = await getDocs(collection(db, COURTS_COL));
         if (cSnap.empty) for (const c of MOCK_COURTS) await setDoc(doc(db, COURTS_COL, c.id), sanitize(c));
-    } catch (e) {}
+    } catch (e) { console.error("Error seeding", e); }
 };
