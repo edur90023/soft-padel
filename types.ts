@@ -50,7 +50,14 @@ export interface Booking {
   paymentMethod?: PaymentMethod;
   price: number;
   isRecurring: boolean;
-  seriesId?: string; // <--- Identificador para agrupar turnos fijos semanales
+  seriesId?: string;
+}
+
+// --- NUEVA INTERFAZ PARA CONSUMOS ---
+export interface ActiveTab {
+  id: string; // ID de la cancha
+  items: CartItem[];
+  lastUpdated: string;
 }
 
 export interface Product {
@@ -61,7 +68,7 @@ export interface Product {
   stock: number;
   minStockAlert: number;
   imageUrl: string;
-  barcode?: string; // <--- NUEVO CAMPO PARA CÓDIGO DE BARRAS
+  barcode?: string;
 }
 
 export interface CartItem extends Product {
@@ -95,13 +102,9 @@ export interface ClubConfig {
   bookingBackgroundImage?: string;
   ads: Advertisement[];
   adRotationInterval: number;
-  
-  // Promotion Config
   promoActive: boolean;
   promoText: string;
   promoPrice: number;
-
-  // Payment Config
   mpAlias: string;
   mpFeePercentage: number;
 }
