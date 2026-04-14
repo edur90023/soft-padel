@@ -50,12 +50,12 @@ export interface Booking {
   paymentMethod?: PaymentMethod;
   price: number;
   isRecurring: boolean;
-  seriesId?: string;
+  seriesId?: string; // <--- Identificador para agrupar turnos fijos semanales
 }
 
-// --- NUEVA INTERFAZ PARA CONSUMOS ---
+// --- NUEVA INTERFAZ PARA CONSUMOS PENDIENTES ---
 export interface ActiveTab {
-  id: string; // ID de la cancha
+  id: string; // Se usará el ID de la cancha como identificador de la cuenta
   items: CartItem[];
   lastUpdated: string;
 }
@@ -68,7 +68,7 @@ export interface Product {
   stock: number;
   minStockAlert: number;
   imageUrl: string;
-  barcode?: string;
+  barcode?: string; // <--- NUEVO CAMPO PARA CÓDIGO DE BARRAS
 }
 
 export interface CartItem extends Product {
