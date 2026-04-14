@@ -47,13 +47,17 @@ const deserializeConfig = (data: any): ClubConfig => {
         }
         config.schedule = scheduleArray;
     }
-    if (!config.mpAlias) config.mpAlias = INITIAL_CONFIG.mpAlias || '';
+    
+    // CORRECCIÓN CRÍTICA: Se cambia la validación para permitir Alias vacíos
+    if (config.mpAlias === undefined || config.mpAlias === null) {
+        config.mpAlias = INITIAL_CONFIG.mpAlias || '';
+    }
+    
     return config;
 };
 
 // --- BOOKINGS ---
 export const subscribeBookings = (callback: (data: Booking[]) => void, onNewBooking?: (booking: Booking) => void) => {
-    // Limitamos reservas para no traer histórico infinito si no es necesario (opcional, aquí traigo todo para el calendario)
     const q = query(collection(db, BOOKINGS_COL));
     let isFirstLoad = true;
     return onSnapshot(q, (snapshot) => {
@@ -112,9 +116,8 @@ export const subscribeConfig = (callback: (data: ClubConfig) => void) => {
 };
 export const updateConfig = async (config: ClubConfig) => setDoc(doc(db, CONFIG_COL, CONFIG_DOC_ID), serializeConfig(config));
 
-// --- ACTIVITY (OPTIMIZADO) ---
+// --- ACTIVITY ---
 export const subscribeActivity = (cb: (d: ActivityLogEntry[]) => void) => {
-    // AHORA SOLO TRAE LOS ÚLTIMOS 200 REGISTROS para evitar lentitud
     const q = query(collection(db, ACTIVITY_COL), orderBy('timestamp', 'desc'), limit(200));
     return onSnapshot(q, (s) => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as ActivityLogEntry))));
 };
@@ -205,7 +208,6 @@ export const runMaintenance = async () => {
     }
 };
 
-// --- SEED ---
 export const seedDatabase = async () => {
     try {
         const uSnap = await getDocs(collection(db, USERS_COL));
