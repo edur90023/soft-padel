@@ -11,7 +11,7 @@ const ACTIVITY_COL = 'activity_logs';
 const EXPENSES_COL = 'expenses';
 const CONFIG_COL = 'club_config';
 const SUMMARIES_COL = 'monthly_summaries';
-const TABS_COL = 'active_tabs'; // <--- NUEVA COLECCIÓN
+const TABS_COL = 'active_tabs'; // <--- NUEVA COLECCIÓN PARA CONSUMOS PENDIENTES
 const CONFIG_DOC_ID = 'main_config';
 
 // --- HELPERS ---
@@ -48,6 +48,7 @@ const deserializeConfig = (data: any): ClubConfig => {
         }
         config.schedule = scheduleArray;
     }
+    // Corrección para permitir borrar el Alias Mercado Pago
     if (config.mpAlias === undefined || config.mpAlias === null) config.mpAlias = INITIAL_CONFIG.mpAlias || '';
     return config;
 };
