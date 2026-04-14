@@ -102,9 +102,13 @@ export interface ClubConfig {
   bookingBackgroundImage?: string;
   ads: Advertisement[];
   adRotationInterval: number;
+  
+  // Promotion Config
   promoActive: boolean;
   promoText: string;
   promoPrice: number;
+
+  // Payment Config
   mpAlias: string;
   mpFeePercentage: number;
 }
