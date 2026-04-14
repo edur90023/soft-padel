@@ -186,7 +186,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
                                 <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Alias Mercado Pago</label>
                                 <div className="relative">
                                     <div className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-400"><CreditCard size={18}/></div>
-                                    <input type="text" value={config.mpAlias || ''} onChange={e => onUpdateConfig({...config, mpAlias: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-lg py-3 pl-10 text-white uppercase placeholder-slate-600 focus:ring-2 focus:ring-purple-500" placeholder="ALIAS.EJEMPLO.MP"/>
+                                    <input 
+                                        type="text" 
+                                        value={config.mpAlias || ''} 
+                                        onChange={e => onUpdateConfig({...config, mpAlias: e.target.value})} 
+                                        className="w-full bg-slate-800 border border-white/10 rounded-lg py-3 pl-10 text-white uppercase placeholder-slate-600 focus:ring-2 focus:ring-purple-500" 
+                                        placeholder="ALIAS.EJEMPLO.MP"
+                                    />
                                 </div>
                             </div>
                             <div>
