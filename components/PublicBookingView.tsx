@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ChevronLeft, ChevronRight, User, Phone, CheckCircle, ArrowLeft, Calendar, 
-  Clock, MapPin, MessageCircle, Info, ExternalLink, Flame, Moon, Map, LayoutGrid, X
+  Clock, MapPin, MessageCircle, ExternalLink, Moon, Map, X
 } from 'lucide-react';
 import { Court, Booking, ClubConfig, BookingStatus } from '../types';
 import { COLOR_THEMES } from '../constants';
@@ -38,6 +38,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
   const [selectedSlotIds, setSelectedSlotIds] = useState<string[]>([]); 
   const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
   const [customerData, setCustomerData] = useState({ name: '', phone: '' });
+  const [isAgreed, setIsAgreed] = useState(false);
 
   const activeAds = useMemo(() => config.ads.filter(ad => ad.isActive), [config.ads]);
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
@@ -52,7 +53,9 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
   const handleDateChange = (days: number) => {
     const d = new Date(selectedDate + 'T12:00:00');
     d.setDate(d.getDate() + days);
-    if (d < new Date(new Date().setHours(0,0,0,0))) return;
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    if (d < today) return;
     setSelectedDate(d.toISOString().split('T')[0]);
     setSelectedSlotIds([]);
     setSelectedCourtId(null);
@@ -85,6 +88,23 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
       return slots;
   }, [selectedDate, config.schedule]);
 
+  // --- FUNCIÓN RESTAURADA: getFreeCourtsForSlot ---
+  const getFreeCourtsForSlot = (slot: TimeSlot): Court[] => {
+      if (isTimeInPast(slot.realDate, slot.time)) return [];
+      const slotDate = new Date(`${slot.realDate}T${slot.time}`);
+      return courts.filter(court => {
+          if (court.status === 'MAINTENANCE') return false;
+          const hasBooking = bookings.some(b => {
+             if (b.courtId !== court.id || b.status === BookingStatus.CANCELLED) return false;
+             const bStart = new Date(`${b.date}T${b.time}`);
+             const bEnd = new Date(bStart.getTime() + b.duration * 60000);
+             const slotEnd = new Date(slotDate.getTime() + 30 * 60000);
+             return bStart < slotEnd && bEnd > slotDate;
+          });
+          return !hasBooking;
+      });
+  };
+
   const availableCourtsForSelection = useMemo(() => {
     if (selectedSlotIds.length === 0) return [];
     return courts.filter(court => {
@@ -93,7 +113,14 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
             const slot = generatedSlots.find(s => s.id === slotId);
             if (!slot) return false;
             const slotDate = new Date(`${slot.realDate}T${slot.time}`);
-            return !bookings.some(b => b.courtId === court.id && b.status !== BookingStatus.CANCELLED && new Date(`${b.date}T${b.time}`) < new Date(slotDate.getTime() + 30 * 60000) && new Date(new Date(`${b.date}T${b.time}`).getTime() + b.duration * 60000) > slotDate);
+            const hasBooking = bookings.some(b => {
+                if (b.courtId !== court.id || b.status === BookingStatus.CANCELLED) return false;
+                const bStart = new Date(`${b.date}T${b.time}`);
+                const bEnd = new Date(bStart.getTime() + b.duration * 60000);
+                const slotEnd = new Date(slotDate.getTime() + 30 * 60000);
+                return bStart < slotEnd && bEnd > slotDate;
+            });
+            return !hasBooking;
         });
     });
   }, [selectedSlotIds, courts, bookings, generatedSlots]);
@@ -117,7 +144,15 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
       return true;
   }, [selectedSlotIds, generatedSlots, config.promoActive]);
 
-  const totalPrice = isPromoEligible ? config.promoPrice : selectedCourtId ? Math.round(((courts.find(c => c.id === selectedCourtId)?.basePrice || 0) / 3) * selectedSlotIds.length) : 0;
+  const calculateTotal = () => {
+      if (isPromoEligible && config.promoActive) return config.promoPrice;
+      if (!selectedCourtId) return 0;
+      const court = courts.find(c => c.id === selectedCourtId);
+      if (!court) return 0;
+      return Math.round(((court.basePrice / 3) * selectedSlotIds.length) / 100) * 100;
+  };
+
+  const totalPrice = calculateTotal();
 
   const handleConfirmBooking = () => {
       const startSlot = generatedSlots.find(s => s.id === selectedSlotIds[0]);
@@ -132,25 +167,31 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
       setTimeout(() => window.open(`https://wa.me/${config.ownerPhone.replace('+', '')}?text=${msg}`, '_blank'), 500);
   };
 
+  // --- COMPONENTE DE PUBLICIDAD RESTAURADO ---
   const renderAd = () => {
     if (activeAds.length === 0) return null;
     const ad = activeAds[currentAdIndex];
     return (
         <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-lg border border-white/10 mt-auto">
-            <img src={ad.imageUrl} className="w-full h-full object-cover"/>
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-            {ad.linkUrl && <a href={ad.linkUrl} target="_blank" className="absolute bottom-2 right-2 bg-white/20 p-1.5 rounded-full"><ExternalLink size={14} className="text-white"/></a>}
+            <img src={ad.imageUrl} className="w-full h-full object-cover" alt="Publicidad"/>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+            <div className="absolute top-2 right-2 bg-black/50 text-[8px] text-white/70 px-2 py-0.5 rounded-md uppercase font-bold tracking-widest">Publicidad</div>
+            {ad.linkUrl && (
+                <a href={ad.linkUrl} target="_blank" rel="noopener noreferrer" className="absolute bottom-2 right-2 bg-blue-600 p-1.5 rounded-full shadow-lg hover:scale-110 transition-transform">
+                    <ExternalLink size={14} className="text-white"/>
+                </a>
+            )}
         </div>
     );
   };
 
   if (step === 'SUCCESS') {
       return (
-          <div className="h-full flex items-center justify-center p-6 bg-slate-950">
+          <div className="h-screen flex items-center justify-center p-6 bg-slate-950">
               <div className="max-w-sm w-full bg-slate-900 border border-white/10 p-8 rounded-3xl text-center shadow-2xl">
                   <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle size={32} className="text-green-500" /></div>
-                  <h2 className="text-2xl font-bold text-white mb-2">Reserva Enviada</h2>
-                  <p className="text-slate-400 mb-8 text-sm">Finalizá la confirmación enviando el WhatsApp que se abrirá.</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">¡Reserva Enviada!</h2>
+                  <p className="text-slate-400 mb-8 text-sm">Se abrirá WhatsApp para finalizar la confirmación.</p>
                   <button onClick={() => { setStep('DATE'); setSelectedSlotIds([]); setSelectedCourtId(null); }} className="w-full bg-white text-slate-950 font-bold py-3 rounded-xl">Hacer otra reserva</button>
               </div>
           </div>
@@ -158,12 +199,12 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-950 relative overflow-hidden font-sans">
-        <div className="relative z-10 flex-1 flex flex-col h-full md:p-6 md:items-center md:justify-center">
+    <div className="h-screen flex flex-col bg-slate-950 relative overflow-hidden font-sans">
+        <div className="relative z-10 flex-1 flex flex-col h-full md:p-6 md:items-center md:justify-center overflow-hidden">
             <div className="flex-1 w-full max-w-5xl md:max-h-[85vh] bg-slate-900 border border-white/10 md:rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden">
                 
                 {/* SIDEBAR */}
-                <div className="hidden md:flex w-72 border-r border-white/5 flex-col p-6 bg-black/20 justify-between">
+                <div className="hidden md:flex w-72 border-r border-white/5 flex-col p-6 bg-black/20 justify-between shrink-0">
                      <div className="space-y-6">
                         <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 bg-slate-800">
                             {config.logoUrl ? <img src={config.logoUrl} className="w-full h-full object-cover"/> : <div className={`w-full h-full ${theme.primary} flex items-center justify-center text-white font-bold text-2xl`}>{config.name.charAt(0)}</div>}
@@ -173,17 +214,17 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1"><MapPin size={10}/> Chilecito, La Rioja</p>
                         </div>
                         <div className="space-y-4 py-4 border-y border-white/5">
-                            <div><label className="text-[9px] font-bold text-slate-600 uppercase block mb-1">Fecha</label><div className="text-white font-bold text-sm flex items-center gap-2"><Calendar size={14} className="text-blue-500"/> {selectedDate}</div></div>
-                            {selectedSlotIds.length > 0 && <div><label className="text-[9px] font-bold text-slate-600 uppercase block mb-1">Horario</label><div className="text-white font-bold text-sm flex items-center gap-2"><Clock size={14} className="text-purple-500"/> {selectedSlotIds.length * 30} min</div></div>}
-                            {selectedCourtId && <div><label className="text-[9px] font-bold text-slate-600 uppercase block mb-1">Cancha</label><div className="text-white font-bold text-sm flex items-center gap-2"><MapPin size={14} className="text-green-500"/> {courts.find(c => c.id === selectedCourtId)?.name}</div></div>}
+                            <div><label className="text-[9px] font-bold text-slate-600 uppercase block mb-1">Día</label><div className="text-white font-bold text-sm flex items-center gap-2"><Calendar size={14} className="text-blue-500"/> {selectedDate}</div></div>
+                            {selectedSlotIds.length > 0 && <div><label className="text-[9px] font-bold text-slate-600 uppercase block mb-1">Duración</label><div className="text-white font-bold text-sm flex items-center gap-2"><Clock size={14} className="text-purple-500"/> {selectedSlotIds.length * 30} min</div></div>}
+                            {selectedCourtId && <div><label className="text-[9px] font-bold text-slate-600 uppercase block mb-1">Cancha</label><div className="text-white font-bold text-sm flex items-center gap-2"><Map size={14} className="text-green-500"/> {courts.find(c => c.id === selectedCourtId)?.name}</div></div>}
                         </div>
                      </div>
                      {renderAd()}
                 </div>
 
-                {/* MAIN */}
-                <div className="flex-1 flex flex-col min-h-0">
-                    <div className="md:hidden p-4 flex items-center justify-between border-b border-white/5 bg-slate-900/50">
+                {/* MAIN CONTENT */}
+                <div className="flex-1 flex flex-col min-h-0 bg-slate-900/50">
+                    <div className="md:hidden p-4 flex items-center justify-between border-b border-white/5 bg-slate-900">
                         {step !== 'DATE' && <button onClick={() => { if(step==='SLOTS') setStep('DATE'); if(step==='COURT_SELECT') setStep('SLOTS'); if(step==='FORM') setStep('COURT_SELECT'); }}><ArrowLeft size={20} className="text-white"/></button>}
                         <h1 className="text-sm font-bold text-white uppercase tracking-widest">{config.name}</h1>
                         <div className="w-5"></div>
@@ -191,61 +232,66 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
 
                     <div className="flex-1 overflow-y-auto p-6 md:p-10 scrollbar-hide">
                         {step === 'DATE' && (
-                            <div className="animate-in fade-in duration-300">
-                                <h2 className="text-xl font-bold text-white mb-6">Selecciona el día</h2>
-                                <div className="bg-slate-800/50 p-2 rounded-2xl border border-white/10 flex items-center justify-between mb-6 max-w-sm">
-                                    <button onClick={() => handleDateChange(-1)} className="p-3 text-white"><ChevronLeft/></button>
-                                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent text-white font-bold text-center outline-none cursor-pointer"/>
-                                    <button onClick={() => handleDateChange(1)} className="p-3 text-white"><ChevronRight/></button>
+                            <div className="animate-in fade-in slide-in-from-right-4">
+                                <h2 className="text-xl font-bold text-white mb-6">Seleccioná la fecha</h2>
+                                <div className="bg-slate-800/60 p-1 rounded-2xl border border-white/10 flex items-center justify-between mb-8 max-w-sm">
+                                    <button onClick={() => handleDateChange(-1)} className="p-4 text-white hover:bg-white/5 rounded-xl transition-colors"><ChevronLeft/></button>
+                                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent text-white font-bold text-lg text-center outline-none cursor-pointer font-mono"/>
+                                    <button onClick={() => handleDateChange(1)} className="p-4 text-white hover:bg-white/5 rounded-xl transition-colors"><ChevronRight/></button>
                                 </div>
-                                <button onClick={() => setStep('SLOTS')} className={`w-full max-w-sm ${theme.primary} text-white font-bold py-4 rounded-xl shadow-lg`}>Ver Horarios</button>
+                                <button onClick={() => setStep('SLOTS')} className={`w-full max-w-sm ${theme.primary} text-white font-bold py-4 rounded-xl shadow-lg transition-transform active:scale-95`}>Ver Horarios Disponibles</button>
+                                <div className="md:hidden mt-10">{renderAd()}</div>
                             </div>
                         )}
 
                         {step === 'SLOTS' && (
-                            <div className="animate-in fade-in duration-300">
+                            <div className="animate-in fade-in slide-in-from-right-4">
                                 <h2 className="text-xl font-bold text-white mb-6">Horarios Disponibles</h2>
-                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 mb-8">
+                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 mb-8">
                                     {generatedSlots.filter(s => !s.isNextDay).map(slot => {
                                         const isAvailable = getFreeCourtsForSlot(slot).length > 0;
                                         const isSelected = selectedSlotIds.includes(slot.id);
                                         return (
                                             <button key={slot.id} disabled={!isAvailable} onClick={() => toggleSlotSelection(slot.id)}
-                                                className={`h-12 rounded-lg text-sm font-bold border transition-all ${isSelected ? `${theme.primary} border-white/20 text-white` : isAvailable ? 'bg-slate-800 border-white/5 text-slate-300 hover:bg-slate-700' : 'bg-slate-950 text-slate-700 border-transparent opacity-30 cursor-not-allowed'}`}
+                                                className={`h-14 rounded-xl text-sm font-bold border transition-all ${isSelected ? `${theme.primary} border-white/30 text-white scale-105 shadow-lg` : isAvailable ? 'bg-slate-800 border-white/5 text-slate-300 hover:bg-slate-700' : 'bg-slate-950 text-slate-700 border-transparent opacity-20 cursor-not-allowed grayscale'}`}
                                             >{slot.time}</button>
                                         );
                                     })}
                                 </div>
-                                {selectedSlotIds.length > 0 && <button onClick={() => setStep('COURT_SELECT')} className={`w-full max-w-sm ${theme.primary} text-white font-bold py-4 rounded-xl`}>Continuar: Elegir Cancha</button>}
+                                {selectedSlotIds.length > 0 && <button onClick={() => setStep('COURT_SELECT')} className={`w-full max-w-sm ${theme.primary} text-white font-bold py-4 rounded-xl shadow-xl transition-all`}>Siguiente: Elegir Cancha</button>}
                             </div>
                         )}
 
                         {step === 'COURT_SELECT' && (
-                            <div className="animate-in fade-in duration-300">
-                                <h2 className="text-xl font-bold text-white mb-4">Elegí tu Cancha</h2>
+                            <div className="animate-in fade-in slide-in-from-right-4">
+                                <h2 className="text-xl font-bold text-white mb-2">Elegí tu Cancha</h2>
+                                <p className="text-slate-400 text-xs mb-6 uppercase tracking-widest">Disponibles para tu horario</p>
                                 <div className="grid grid-cols-1 gap-3 mb-8">
-                                    {availableCourtsForSelection.length === 0 ? <p className="text-slate-500 text-sm italic">Sin disponibilidad para este bloque.</p> :
+                                    {availableCourtsForSelection.length === 0 ? <p className="text-slate-500 text-sm italic py-10 text-center bg-white/5 rounded-2xl border border-dashed border-white/10">No hay canchas 100% libres para este bloque.</p> :
                                         availableCourtsForSelection.map(court => (
-                                            <button key={court.id} onClick={() => setSelectedCourtId(court.id)} className={`p-4 rounded-xl border-2 flex items-center justify-between transition-all ${selectedCourtId === court.id ? 'bg-blue-600/10 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-slate-400'}`}>
-                                                <div className="flex items-center gap-3"><MapPin size={18}/><span className="font-bold">{court.name}</span><span className="text-[10px] opacity-60 uppercase">{court.type}</span></div>
-                                                <span className="font-bold text-sm">${court.basePrice.toLocaleString()}</span>
+                                            <button key={court.id} onClick={() => setSelectedCourtId(court.id)} className={`p-5 rounded-2xl border-2 transition-all flex items-center justify-between ${selectedCourtId === court.id ? 'bg-blue-600/10 border-blue-500 text-white shadow-lg' : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'}`}>
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`p-3 rounded-xl ${selectedCourtId === court.id ? 'bg-blue-600' : 'bg-slate-800'}`}><MapPin size={20} className="text-white"/></div>
+                                                    <div className="text-left"><span className="font-bold block text-base">{court.name}</span><span className="text-[10px] opacity-60 uppercase font-bold tracking-tighter">{court.type}</span></div>
+                                                </div>
+                                                <span className="font-bold text-lg font-mono">${court.basePrice.toLocaleString()}</span>
                                             </button>
                                         ))
                                     }
                                 </div>
-                                <button disabled={!selectedCourtId} onClick={() => setStep('FORM')} className={`w-full max-w-sm ${theme.primary} text-white font-bold py-4 rounded-xl disabled:opacity-20`}>Siguiente: Mis Datos</button>
+                                <button disabled={!selectedCourtId} onClick={() => setStep('FORM')} className={`w-full max-w-sm ${theme.primary} text-white font-bold py-4 rounded-xl disabled:opacity-30 transition-all`}>Siguiente: Mis Datos</button>
                             </div>
                         )}
 
                         {step === 'FORM' && (
-                            <div className="animate-in fade-in duration-300 max-w-md">
+                            <div className="animate-in fade-in slide-in-from-right-4 max-w-md">
                                 <h2 className="text-xl font-bold text-white mb-6">Tus Datos</h2>
                                 <div className="space-y-4">
-                                    <input type="text" value={customerData.name} onChange={e => setCustomerData({...customerData, name: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="Nombre Completo"/>
-                                    <input type="tel" value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="WhatsApp (11 1234 5678)"/>
-                                    <div onClick={() => setIsAgreed(!isAgreed)} className="flex items-start gap-3 p-4 bg-white/5 rounded-xl cursor-pointer">
-                                        <div className={`mt-1 w-5 h-5 rounded border flex items-center justify-center ${isAgreed ? 'bg-blue-600 border-blue-600' : 'border-slate-600'}`}>{isAgreed && <CheckCircle size={14} className="text-white"/>}</div>
-                                        <p className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">Entiendo que debo enviar el WhatsApp final.</p>
+                                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Nombre Completo</label><input type="text" value={customerData.name} onChange={e => setCustomerData({...customerData, name: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ej: Juan Pérez"/></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1">WhatsApp</label><input type="tel" value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})} className="w-full bg-slate-800 border border-white/10 rounded-xl p-4 text-white outline-none focus:ring-2 focus:ring-blue-500 font-mono" placeholder="11 1234 5678"/></div>
+                                    <div onClick={() => setIsAgreed(!isAgreed)} className="flex items-start gap-3 p-4 bg-white/5 rounded-2xl cursor-pointer border border-white/5 hover:bg-white/10 transition-all">
+                                        <div className={`mt-1 w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${isAgreed ? 'bg-blue-600 border-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.4)]' : 'border-slate-600'}`}>{isAgreed && <CheckCircle size={14} className="text-white"/>}</div>
+                                        <div className="flex-1"><p className="text-[11px] text-white font-bold uppercase tracking-tight">Confirmación por WhatsApp</p><p className="text-[9px] text-slate-500 leading-tight mt-0.5">Entiendo que debo enviar el mensaje final para validar mi reserva.</p></div>
                                     </div>
                                 </div>
                             </div>
@@ -254,14 +300,14 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
 
                     {/* FOOTER */}
                     {step !== 'DATE' && (
-                        <div className="bg-slate-900 border-t border-white/5 p-6 md:px-10 flex items-center justify-between">
+                        <div className="bg-slate-900/80 backdrop-blur-md border-t border-white/5 p-6 md:px-10 flex items-center justify-between shrink-0">
                             <div className="flex flex-col">
-                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Total</span>
-                                <span className="text-xl font-bold text-white">${totalPrice.toLocaleString()}</span>
+                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Total a pagar</span>
+                                <span className="text-2xl font-bold text-white font-mono">${totalPrice.toLocaleString()}</span>
                             </div>
                             {step === 'FORM' ? 
-                                <button onClick={handleConfirmBooking} disabled={!customerData.name || !customerData.phone || !isAgreed} className="px-8 py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg disabled:opacity-20 flex items-center gap-2"><MessageCircle size={18}/> Reservar</button> :
-                                <button onClick={() => { if(step==='SLOTS') setStep('COURT_SELECT'); if(step==='COURT_SELECT') setStep('FORM'); }} disabled={selectedSlotIds.length === 0 || (step==='COURT_SELECT' && !selectedCourtId)} className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl">Siguiente</button>
+                                <button onClick={handleConfirmBooking} disabled={!customerData.name || !customerData.phone || !isAgreed} className="px-10 py-3.5 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl shadow-lg disabled:opacity-20 flex items-center gap-2 transition-all active:scale-95"><MessageCircle size={18}/> Reservar</button> :
+                                <button onClick={() => { if(step==='SLOTS') setStep('COURT_SELECT'); if(step==='COURT_SELECT') setStep('FORM'); }} disabled={selectedSlotIds.length === 0 || (step==='COURT_SELECT' && !selectedCourtId)} className="px-10 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95">Siguiente</button>
                             }
                         </div>
                     )}
