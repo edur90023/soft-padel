@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, QrCode, AlertTriangle, X, Copy, Share2, CheckCircle, Loader2, Barcode, Clock, LayoutGrid } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, QrCode, AlertTriangle, X, Copy, Share2, CheckCircle, Loader2, Barcode, LayoutGrid, Clock } from 'lucide-react';
 import { Product, CartItem, ClubConfig, PaymentMethod, Court, ActiveTab } from '../types';
 import { COLOR_THEMES } from '../constants';
 import { createCartPreference } from '../services/mercadopago';
@@ -23,9 +23,11 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedCourtId, setSelectedCourtId] = useState<string>('');
   
+  // LÓGICA DE CÓDIGO DE BARRAS (ORIGINAL)
   const barcodeBuffer = useRef<string>('');
   const lastKeyTime = useRef<number>(0);
 
+  // Payment Modal State (ORIGINAL)
   const [paymentModal, setPaymentModal] = useState<{ isOpen: boolean, type: PaymentMethod | null }>({ isOpen: false, type: null });
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [isLoadingQr, setIsLoadingQr] = useState(false);
@@ -45,26 +47,20 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
     });
   };
 
+  // EFECTO ESCÁNER (ORIGINAL)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
         const currentTime = Date.now();
         if (currentTime - lastKeyTime.current > 50) barcodeBuffer.current = '';
         lastKeyTime.current = currentTime;
-
         if (e.key === 'Enter') {
             if (barcodeBuffer.current.length > 2) {
                 const foundProduct = products.find(p => p.barcode === barcodeBuffer.current);
-                if (foundProduct) {
-                    addToCart(foundProduct);
-                    barcodeBuffer.current = '';
-                } else {
-                    barcodeBuffer.current = '';
-                }
+                if (foundProduct) addToCart(foundProduct);
+                barcodeBuffer.current = '';
             }
-        } else if (e.key.length === 1) {
-            barcodeBuffer.current += e.key;
-        }
+        } else if (e.key.length === 1) barcodeBuffer.current += e.key;
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -86,7 +82,8 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
   };
 
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const finalTotal = total + (paymentModal.type === PaymentMethod.QR ? (total * (config.mpFeePercentage || 0) / 100) : 0);
+  const surcharge = paymentModal.type === PaymentMethod.QR ? (total * (config.mpFeePercentage || 0) / 100) : 0;
+  const finalTotal = total + surcharge;
 
   const filteredProducts = products.filter(p => 
     (selectedCategory === 'all' || p.category === selectedCategory) &&
@@ -94,28 +91,25 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
   );
 
   const handleSaveToCourt = () => {
-      if (!selectedCourtId) return alert("Selecciona una cancha");
-      if (cart.length === 0) return alert("El carrito está vacío");
-      
-      const existingTab = activeTabs.find(t => t.id === selectedCourtId);
-      let newItems = [...cart];
-      
-      if (existingTab) {
-          existingTab.items.forEach(oldItem => {
-              const index = newItems.findIndex(i => i.id === oldItem.id);
-              if (index !== -1) newItems[index].quantity += oldItem.quantity;
-              else newItems.push(oldItem);
-          });
-      }
-      
-      onUpdateActiveTab(selectedCourtId, newItems);
-      setCart([]);
-      setSelectedCourtId('');
-      alert("Consumos guardados en la cancha.");
+    if (!selectedCourtId) return alert("Selecciona una cancha");
+    if (cart.length === 0) return alert("El carrito está vacío");
+    const existingTab = activeTabs.find(t => t.id === selectedCourtId);
+    let newItems = [...cart];
+    if (existingTab) {
+        existingTab.items.forEach(oldItem => {
+            const index = newItems.findIndex(i => i.id === oldItem.id);
+            if (index !== -1) newItems[index].quantity += oldItem.quantity;
+            else newItems.push(oldItem);
+        });
+    }
+    onUpdateActiveTab(selectedCourtId, newItems);
+    setCart([]);
+    setSelectedCourtId('');
+    alert("Consumos guardados en la cancha.");
   };
 
   const loadTab = (tab: ActiveTab) => {
-      if (cart.length > 0 && !confirm("Se reemplazará el carrito actual con los consumos de la cancha. ¿Continuar?")) return;
+      if (cart.length > 0 && !confirm("Se reemplazará el carrito actual. ¿Continuar?")) return;
       setCart(tab.items);
       setSelectedCourtId(tab.id);
   };
@@ -144,7 +138,7 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-100px)] gap-6 animate-in fade-in duration-500">
       
-      {/* Catálogo de Productos */}
+      {/* Catálogo de Productos (DISEÑO ORIGINAL) */}
       <div className="flex-1 flex flex-col bg-slate-900/60 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl overflow-hidden">
         <div className="p-4 border-b border-white/10 space-y-4">
             <div className="flex items-center gap-4">
@@ -190,10 +184,10 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
             </div>
         </div>
 
-        {/* Panel de Cuentas Abiertas (Barra Inferior) */}
+        {/* Panel inferior de Cuentas Pendientes */}
         {activeTabs.length > 0 && (
             <div className="p-4 bg-blue-600/10 border-t border-white/10">
-                <h3 className="text-xs font-bold text-blue-400 uppercase mb-3 flex items-center gap-2"><Clock size={14}/> Consumos Pendientes por Cancha</h3>
+                <h3 className="text-xs font-bold text-blue-400 uppercase mb-3 flex items-center gap-2"><Clock size={14}/> Consumos Pendientes</h3>
                 <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
                     {activeTabs.map(tab => (
                         <button key={tab.id} onClick={() => loadTab(tab)} className="bg-slate-800 border border-blue-500/30 p-3 rounded-xl flex items-center gap-3 hover:bg-slate-700 transition-all min-w-[160px] shadow-lg">
@@ -209,7 +203,7 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
         )}
       </div>
 
-      {/* Sidebar del Carrito */}
+      {/* Sidebar del Carrito (DISEÑO ORIGINAL) */}
       <div className="w-full lg:w-[400px] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden">
         <div className="p-5 bg-slate-100 border-b border-slate-200 flex justify-between items-center">
             <h2 className="text-slate-800 font-bold text-xl flex items-center gap-2"><ShoppingCart className="text-slate-600"/> Carrito</h2>
@@ -235,22 +229,19 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
             )}
         </div>
 
-        {/* Totales y Asignación */}
         <div className="p-6 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] space-y-4">
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Asignar consumos a cancha</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Dejar pendiente en cancha</label>
                 <div className="flex gap-2">
                     <select value={selectedCourtId} onChange={e => setSelectedCourtId(e.target.value)} className="flex-1 bg-white border border-slate-200 rounded-lg p-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">Venta inmediata (Bar)</option>
                         {courts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
-                    <button onClick={handleSaveToCourt} disabled={!selectedCourtId || cart.length === 0} className="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-lg disabled:opacity-30 transition-all shadow-md flex items-center justify-center" title="Guardar como pendiente"><Plus size={20}/></button>
+                    <button onClick={handleSaveToCourt} disabled={!selectedCourtId || cart.length === 0} className="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-lg disabled:opacity-30 transition-all shadow-md flex items-center justify-center"><Plus size={20}/></button>
                 </div>
-                {selectedCourtId && <p className="text-[9px] text-blue-600 font-bold mt-2 uppercase">Los productos se guardarán hasta que se cobre el turno.</p>}
             </div>
 
             <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Total a Pagar</span><span className="text-3xl font-black text-slate-800">${formatMoney(total)}</span></div>
-            
             <div className="grid grid-cols-3 gap-3">
                 <button onClick={() => handlePaymentClick(PaymentMethod.CASH)} disabled={cart.length === 0} className="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-green-100 bg-green-50 text-green-700 hover:bg-green-100 transition-all disabled:opacity-50"><Banknote size={24} className="mb-1"/><span className="text-xs font-bold">Efectivo</span></button>
                 <button onClick={() => handlePaymentClick(PaymentMethod.QR)} disabled={cart.length === 0} className="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-all disabled:opacity-50"><QrCode size={24} className="mb-1"/><span className="text-xs font-bold">QR MP</span></button>
@@ -259,21 +250,21 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
         </div>
       </div>
 
-      {/* Modal de Pago (Código Original) */}
+      {/* Modal de Pago (DISEÑO ORIGINAL) */}
       {paymentModal.isOpen && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
               <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative">
                   <button onClick={() => setPaymentModal({ isOpen: false, type: null })} className="absolute right-4 top-4 text-slate-400 hover:text-white"><X size={20}/></button>
                   <div className="text-center mb-6">
                       <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg border border-white/5 
-                        ${paymentModal.type === PaymentMethod.CASH ? 'bg-green-500/20 text-green-500' : 
-                          paymentModal.type === PaymentMethod.QR ? 'bg-blue-500/20 text-blue-500' : 'bg-purple-500/20 text-purple-500'}`}>
+                        ${paymentModal.type === PaymentMethod.CASH ? 'bg-green-500/20 text-green-500 border-green-500/30' : 
+                          paymentModal.type === PaymentMethod.QR ? 'bg-blue-500/20 text-blue-500 border-blue-500/30' : 
+                          'bg-purple-500/20 text-purple-500 border-purple-500/30'}`}>
                           {paymentModal.type === PaymentMethod.CASH && <Banknote size={32}/>}
                           {paymentModal.type === PaymentMethod.QR && <QrCode size={32}/>}
                           {paymentModal.type === PaymentMethod.TRANSFER && <CreditCard size={32}/>}
                       </div>
                       <h3 className="text-xl font-bold text-white mb-4">Total: ${formatMoney(finalTotal)}</h3>
-                      
                       {paymentModal.type === PaymentMethod.QR && (
                           <div className="bg-white p-4 rounded-xl mb-4 mx-auto w-fit shadow-inner min-h-[200px] flex flex-col items-center justify-center">
                               {isLoadingQr ? <Loader2 className="animate-spin text-blue-500" size={32}/> : qrUrl ? (
@@ -284,7 +275,6 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
                               ) : <p className="text-red-500 text-xs font-bold">Error generando QR</p>}
                           </div>
                       )}
-
                       {paymentModal.type === PaymentMethod.TRANSFER && (
                           <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5 space-y-3 mb-6">
                               <p className="text-xs text-slate-500 uppercase font-bold">Alias de Cobro</p>
@@ -296,7 +286,7 @@ export const POSModule: React.FC<POSModuleProps> = ({ products, config, courts, 
                           </div>
                       )}
                   </div>
-                  <button onClick={confirmModalPayment} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 active:scale-95 transition-all">Confirmar Pago Realizado</button>
+                  <button onClick={confirmModalPayment} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-all">Confirmar Pago Realizado</button>
               </div>
           </div>
       )}
