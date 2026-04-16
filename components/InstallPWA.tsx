@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Download, Share, PlusSquare, X, Smartphone } from 'lucide-react';
+import { Download, Share, PlusSquare, X } from 'lucide-react';
 import { ClubConfig } from '../types';
 
 interface InstallPWAProps {
-  config: ClubConfig;
+  config?: ClubConfig; // Lo hacemos opcional por seguridad
 }
 
 export const InstallPWA: React.FC<InstallPWAProps> = ({ config }) => {
@@ -14,18 +14,21 @@ export const InstallPWA: React.FC<InstallPWAProps> = ({ config }) => {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
+    // 1. Detectar si ya está instalada
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
     if (isStandalone) {
       setIsInstalled(true);
       return;
     }
 
+    // 2. Detectar si es iOS (iPhone/iPad)
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIOS(isIosDevice);
 
+    // 3. Escuchar el evento de instalación en Android/Chrome
     const handler = (e: Event) => {
-      e.preventDefault();
+      e.preventDefault(); // Esto genera el mensaje (normal) en consola
       setSupportsPWA(true);
       setPromptInstall(e);
     };
@@ -43,8 +46,15 @@ export const InstallPWA: React.FC<InstallPWAProps> = ({ config }) => {
     }
   };
 
+  // Si ya está instalada o el usuario cerró el cartel, no mostramos nada
   if (isInstalled || !isVisible) return null;
+  
+  // Si no es iOS y tampoco soporta PWA, no mostramos nada
   if (!isIOS && !supportsPWA) return null;
+
+  // Variables seguras para evitar errores de "undefined"
+  const clubName = config?.name || 'App Oficial';
+  const logo = config?.logoUrl;
 
   return (
     <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] w-[90%] max-w-sm animate-in slide-in-from-top-10 fade-in duration-500">
@@ -55,18 +65,18 @@ export const InstallPWA: React.FC<InstallPWAProps> = ({ config }) => {
         </button>
 
         <div className="w-14 h-14 rounded-2xl overflow-hidden border border-white/10 shadow-lg shrink-0 bg-slate-800">
-          {config.logoUrl ? (
-            <img src={config.logoUrl} className="w-full h-full object-cover" alt="App Logo" />
+          {logo ? (
+            <img src={logo} className="w-full h-full object-cover" alt="App Logo" />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-blue-600 text-white font-black text-xl italic">
-              {config.name.charAt(0)}
+              {clubName.charAt(0)}
             </div>
           )}
         </div>
 
         <div className="flex-1 pr-6">
           <h4 className="text-white font-black text-sm uppercase italic leading-none mb-1">App Oficial</h4>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-2">{config.name}</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-2">{clubName}</p>
           
           {isIOS ? (
             <p className="text-[10px] text-blue-400 font-medium leading-tight">
