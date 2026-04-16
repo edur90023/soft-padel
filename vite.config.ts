@@ -16,8 +16,8 @@ export default defineConfig(({ mode }) => {
           registerType: 'autoUpdate',
           includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
           manifest: {
-            name: 'Padel Club Manager',
-            short_name: 'PadelApp',
+            name: 'La Cuesta Padel', // <--- Nombre completo de la App
+            short_name: 'La Cuesta', // <--- Nombre corto para la pantalla de inicio
             description: 'Gestión integral de tu club de pádel',
             theme_color: '#0f172a',
             background_color: '#0f172a',
