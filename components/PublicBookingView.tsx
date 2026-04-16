@@ -38,6 +38,7 @@ import {
   X,
   Lock,
   Globe,
+  HelpCircle,
   Check,
   Image as ImageIcon
 } from 'lucide-react';
