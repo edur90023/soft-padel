@@ -9,6 +9,7 @@ import { PublicBookingView } from './components/PublicBookingView';
 import { CashboxModule } from './components/CashboxModule';
 import { ReportsModule } from './components/ReportsModule';
 import { SettingsView } from './components/SettingsView';
+import { InstallPWA } from './components/InstallPWA'; // <--- LÍNEA AGREGADA 1: Importamos el componente PWA
 
 import { INITIAL_CONFIG, COLOR_THEMES } from './constants';
 import { User, Booking, Product, ClubConfig, Court, ActivityLogEntry, BookingStatus, PaymentMethod, CartItem, ActivityType, Expense, ActiveTab } from './types';
@@ -291,6 +292,7 @@ const App = () => {
     }
     return (
         <div className="relative h-screen w-full">
+            <InstallPWA /> {/* <--- LÍNEA AGREGADA 2: PWA para los clientes en la web pública */}
             <PublicBookingView config={config} courts={courts} bookings={bookings} onAddBooking={handleAddBooking} />
             <button onClick={() => setShowLogin(true)} className="absolute top-4 right-4 z-50 p-2 text-white/10 hover:text-white/50 transition-colors rounded-full" title="Acceso Admin"><Lock size={16}/></button>
         </div>
@@ -300,6 +302,7 @@ const App = () => {
   return (
     <>
         <NotificationToast message={toast} onClose={() => setToast(null)} />
+        <InstallPWA /> {/* <--- LÍNEA AGREGADA 3: PWA para los administradores logueados */}
         <Layout activeView={activeView} onChangeView={setActiveView} config={config} role={user.role} onLogout={handleLogout}>
             {activeView === 'dashboard' && <Dashboard bookings={bookings} products={products} config={config} />}
             {activeView === 'bookings' && <BookingModule bookings={bookings} courts={courts} config={config} onUpdateStatus={handleUpdateStatus} onUpdateBooking={handleUpdateBooking} onAddBooking={handleAddBooking} />}
