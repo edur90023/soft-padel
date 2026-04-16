@@ -252,12 +252,11 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
         <div className="relative z-10 flex-1 flex flex-col h-full md:p-6 lg:p-8 md:items-center md:justify-center overflow-hidden">
             <div className="flex-1 w-full md:max-w-5xl lg:max-w-6xl md:max-h-[92vh] bg-slate-900/60 border border-white/10 md:rounded-[3rem] shadow-2xl flex flex-col md:flex-row overflow-hidden backdrop-blur-2xl transition-all duration-700">
                 
-                {/* --- SIDEBAR DESKTOP (Ancho ajustado) --- */}
+                {/* --- SIDEBAR DESKTOP --- */}
                 <div className="hidden md:flex w-64 lg:w-72 border-r border-white/10 flex-col p-6 lg:p-8 bg-black/40 justify-between relative overflow-hidden shrink-0">
                      <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2"></div>
                      
                      <div className="flex-1 flex flex-col min-h-0 relative z-10">
-                        {/* Logo y Título */}
                         <div className="mb-6 shrink-0">
                             <div className="w-20 h-20 rounded-[1.5rem] overflow-hidden shadow-xl border-2 border-white/10 bg-slate-800 mb-4">
                                 {config.logoUrl ? <img src={config.logoUrl} className="w-full h-full object-cover" alt="Logo"/> : <div className={`w-full h-full ${theme.primary} flex items-center justify-center text-white font-black text-3xl`}>{config.name.charAt(0)}</div>}
@@ -309,37 +308,46 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                 {/* --- CONTENIDO PRINCIPAL --- */}
                 <div className="flex-1 flex flex-col min-h-0 relative bg-slate-900/20">
                     
-                    {/* Header Mobile */}
+                    {/* Header Mobile (CON FLECHA DE ATRÁS SIEMPRE VISIBLE) */}
                     <div className="md:hidden p-4 sm:p-5 flex items-center justify-between shrink-0 relative bg-slate-950/80 backdrop-blur-xl border-b border-white/5 z-50">
-                        {['DATE', 'GALLERY', 'RANKING'].includes(step) ? (
-                            <div className="flex gap-2">
-                                <button onClick={() => setStep('GALLERY')} className={`p-2.5 rounded-lg transition-all ${step === 'GALLERY' ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white'}`}><ImageIcon size={18}/></button>
-                                <button onClick={() => setStep('RANKING')} className={`p-2.5 rounded-lg transition-all ${step === 'RANKING' ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white'}`}><Trophy size={18}/></button>
-                            </div>
-                        ) : (
+                        {step !== 'DATE' ? (
                             <button onClick={() => {
-                                if (step === 'SLOTS') setStep('DATE');
+                                if (step === 'SLOTS' || step === 'GALLERY' || step === 'RANKING') setStep('DATE');
                                 if (step === 'COURT_SELECT') setStep('SLOTS');
                                 if (step === 'FORM') setStep('COURT_SELECT');
-                            }} className="p-2 rounded-lg bg-white/5 text-white active:scale-90 transition-all border border-white/10 shadow-sm">
-                                <ArrowLeft size={18}/>
+                            }} className="p-2 sm:p-2.5 rounded-xl bg-white/5 text-white active:scale-90 transition-all border border-white/10 shadow-sm flex items-center justify-center">
+                                <ArrowLeft size={20}/>
                             </button>
+                        ) : (
+                            <div className="w-10"></div>
                         )}
-                        <h1 className="text-base font-black text-white text-center uppercase tracking-tighter italic truncate px-2">{config.name}</h1>
-                        <button onClick={() => setIsHelpOpen(true)} className="text-slate-400 hover:text-white p-2 transition-all"><HelpCircle size={20}/></button>
+                        <h1 className="text-lg sm:text-xl font-black text-white text-center uppercase tracking-tighter italic drop-shadow-md truncate max-w-[180px]">{config.name}</h1>
+                        <button onClick={() => setIsHelpOpen(true)} className="text-slate-400 hover:text-white p-2.5 bg-white/5 rounded-xl transition-all flex items-center justify-center"><HelpCircle size={20}/></button>
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-5 sm:p-8 lg:p-10 scrollbar-hide relative z-30">
                         
-                        {/* STEP 1: DATE (Layout Corregido) */}
+                        {/* STEP 1: DATE (CON BOTONES LLAMATIVOS) */}
                         {step === 'DATE' && (
                             <div className="animate-in fade-in slide-in-from-bottom-10 duration-700 max-w-xl mx-auto">
                                 <div className="mb-8">
-                                    <h2 className="text-4xl md:text-5xl font-black text-white mb-2 tracking-tighter uppercase italic leading-[0.9] break-words">Reservá tu <span className="text-blue-500">Turno</span></h2>
+                                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white mb-2 tracking-tighter uppercase italic leading-[0.9] break-words">Reservá tu <span className="text-blue-500">Turno</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px] border-l-2 border-blue-600 pl-3">Paso 1: Seleccioná el día</p>
                                 </div>
 
-                                {/* CALENDARIO (Solo centrado, sin tarjetas apretadas) */}
+                                {/* BOTONES DE GALERIA Y RANKING (SOLO MOVILES, MUY LLAMATIVOS) */}
+                                <div className="grid grid-cols-2 gap-4 mb-6 md:hidden">
+                                    <button onClick={() => setStep('GALLERY')} className="bg-gradient-to-br from-blue-600/20 to-blue-900/40 backdrop-blur-md p-5 rounded-3xl border border-blue-500/30 flex flex-col items-center justify-center gap-2 shadow-xl active:scale-95 transition-all group">
+                                        <ImageIcon className="text-blue-400 group-hover:scale-110 transition-transform" size={28}/>
+                                        <span className="text-white font-black text-[10px] uppercase tracking-[0.2em] mt-1">Ver Fotos</span>
+                                    </button>
+                                    <button onClick={() => setStep('RANKING')} className="bg-gradient-to-br from-yellow-500/20 to-orange-600/40 backdrop-blur-md p-5 rounded-3xl border border-yellow-500/30 flex flex-col items-center justify-center gap-2 shadow-xl active:scale-95 transition-all group">
+                                        <Trophy className="text-yellow-400 group-hover:scale-110 transition-transform" size={28}/>
+                                        <span className="text-white font-black text-[10px] uppercase tracking-[0.2em] mt-1">Ranking</span>
+                                    </button>
+                                </div>
+
+                                {/* CALENDARIO */}
                                 <div className="bg-slate-800/40 p-4 sm:p-6 rounded-[2rem] border border-white/10 flex items-center justify-between shadow-xl mb-8 backdrop-blur-md">
                                     <button onClick={() => handleDateChange(-1)} className="p-4 sm:p-6 bg-white/5 text-white hover:bg-white/10 rounded-2xl transition-all hover:scale-105 active:scale-95"><ChevronLeft size={24}/></button>
                                     <div className="text-center flex-1 min-w-0 px-2">
@@ -360,7 +368,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                         {step === 'SLOTS' && (
                             <div className="animate-in fade-in slide-in-from-right-16 duration-500">
                                 <div className="mb-8 border-b border-white/5 pb-6">
-                                    <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Elegí tu <span className="text-blue-500">Tiempo</span></h2>
+                                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Elegí tu <span className="text-blue-500">Tiempo</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-3 border-l-2 border-blue-500 pl-3">Paso 2: Marcá los bloques de 30m</p>
                                 </div>
 
@@ -397,7 +405,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                         {step === 'COURT_SELECT' && (
                             <div className="animate-in fade-in slide-in-from-right-16 duration-500 max-w-2xl mx-auto">
                                 <div className="mb-8">
-                                    <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Elegí la <span className="text-blue-500">Cancha</span></h2>
+                                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Elegí la <span className="text-blue-500">Cancha</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-3 border-l-2 border-blue-500 pl-3">Paso 3: Disponibles para tu horario</p>
                                 </div>
 
@@ -463,7 +471,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                         {step === 'FORM' && (
                             <div className="animate-in fade-in slide-in-from-right-16 duration-500 flex flex-col h-full max-w-lg mx-auto">
                                 <div className="mb-10">
-                                    <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Tus <span className="text-blue-600">Datos</span></h2>
+                                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Tus <span className="text-blue-600">Datos</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-3 border-l-2 border-blue-500 pl-3">Paso 4: Confirmación final</p>
                                 </div>
 
@@ -501,7 +509,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                         {step === 'GALLERY' && (
                             <div className="animate-in fade-in slide-in-from-bottom-12 duration-700 space-y-8 md:space-y-10 pb-20 md:pb-0 max-w-6xl mx-auto">
                                 <div className="mb-8 md:mb-12">
-                                    <h2 className="text-4xl md:text-5xl font-black text-white mb-2 md:mb-4 tracking-tighter uppercase italic leading-[0.9] break-words">Nuestro <span className="text-blue-500">Club</span></h2>
+                                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-2 md:mb-4 tracking-tighter uppercase italic leading-[0.9] break-words">Nuestro <span className="text-blue-500">Club</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] border-l-2 border-blue-600 pl-3">Conoce nuestras instalaciones</p>
                                 </div>
                                 
@@ -529,7 +537,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                         {step === 'RANKING' && (
                             <div className="animate-in fade-in slide-in-from-bottom-12 duration-700 space-y-8 md:space-y-10 max-w-4xl mx-auto pb-20 md:pb-0">
                                 <div className="mb-6 md:mb-8">
-                                    <h2 className="text-4xl md:text-5xl font-black text-white mb-2 md:mb-4 tracking-tighter uppercase italic leading-[0.9] break-words">Ranking <span className="text-yellow-500">Torneo</span></h2>
+                                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-2 md:mb-4 tracking-tighter uppercase italic leading-[0.9] break-words">Ranking <span className="text-yellow-500">Torneo</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] border-l-2 border-yellow-500 pl-3">Tabla de posiciones oficial</p>
                                 </div>
 
