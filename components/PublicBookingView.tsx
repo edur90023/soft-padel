@@ -25,7 +25,7 @@ import {
   HelpCircle, 
   Image as ImageIcon
 } from 'lucide-react';
-import { Court, Booking, ClubConfig, BookingStatus } from '../types';
+import { Court, Booking, ClubConfig, BookingStatus, TournamentPlayer } from '../types';
 import { COLOR_THEMES } from '../constants';
 
 interface PublicBookingViewProps {
@@ -63,6 +63,9 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
   const [isAgreed, setIsAgreed] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
+
+  // --- ESTADO PARA LAS PESTAÑAS DE CATEGORÍA ---
+  const [rankingCategory, setRankingCategory] = useState<string>('Todas');
 
   const activeAds = useMemo(() => config.ads.filter(ad => ad.isActive), [config.ads]);
   const theme = COLOR_THEMES[config.courtColorTheme];
@@ -172,6 +175,19 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
       setTimeout(() => window.open(`https://wa.me/${config.ownerPhone.replace('+', '')}?text=${msg}`, '_blank'), 500);
   };
 
+  // --- LÓGICA DE FILTRADO DEL RANKING ---
+  const rankingCategories = useMemo(() => {
+      const cats = new Set(config.tournamentRanking?.map(p => p.category) || []);
+      return ['Todas', ...Array.from(cats).sort()];
+  }, [config.tournamentRanking]);
+
+  const filteredRanking = useMemo(() => {
+      const players = config.tournamentRanking || [];
+      if (rankingCategory === 'Todas') return players.sort((a,b) => b.points - a.points);
+      return players.filter(p => p.category === rankingCategory).sort((a,b) => b.points - a.points);
+  }, [config.tournamentRanking, rankingCategory]);
+
+
   const renderAd = () => {
     if (activeAds.length === 0) return null;
     const ad = activeAds[currentAdIndex];
@@ -225,9 +241,10 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
   return (
     <div className="h-full flex flex-col relative overflow-hidden font-sans bg-slate-950 selection:bg-blue-600/40">
         
+        {/* FONDO ESMERILADO */}
         <div className="absolute inset-0 z-0">
              <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000 opacity-80" style={{ backgroundImage: config.bookingBackgroundImage ? `url(${config.bookingBackgroundImage})` : 'none' }}></div>
-             <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[8px]"></div>
+             <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-[10px]"></div>
              <div className="absolute -top-[10%] -left-[10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none animate-pulse"></div>
              <div className="absolute -bottom-[10%] -right-[10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{animationDelay: '1s'}}></div>
         </div>
@@ -235,7 +252,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
         <div className="relative z-10 flex-1 flex flex-col h-full md:p-6 lg:p-8 md:items-center md:justify-center overflow-hidden">
             <div className="flex-1 w-full md:max-w-5xl lg:max-w-6xl md:max-h-[92vh] bg-slate-900/60 border border-white/10 md:rounded-[3rem] shadow-2xl flex flex-col md:flex-row overflow-hidden backdrop-blur-2xl transition-all duration-700">
                 
-                {/* --- SIDEBAR DESKTOP (Más angosto para dar respiro al texto) --- */}
+                {/* --- SIDEBAR DESKTOP (Ancho ajustado) --- */}
                 <div className="hidden md:flex w-64 lg:w-72 border-r border-white/10 flex-col p-6 lg:p-8 bg-black/40 justify-between relative overflow-hidden shrink-0">
                      <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2"></div>
                      
@@ -293,11 +310,11 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                 <div className="flex-1 flex flex-col min-h-0 relative bg-slate-900/20">
                     
                     {/* Header Mobile */}
-                    <div className="md:hidden p-4 flex items-center justify-between border-b border-white/5 bg-slate-950/80 backdrop-blur-xl shrink-0 z-50">
+                    <div className="md:hidden p-4 sm:p-5 flex items-center justify-between shrink-0 relative bg-slate-950/80 backdrop-blur-xl border-b border-white/5 z-50">
                         {['DATE', 'GALLERY', 'RANKING'].includes(step) ? (
                             <div className="flex gap-2">
-                                <button onClick={() => setStep('GALLERY')} className={`p-2 rounded-lg transition-all ${step === 'GALLERY' ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white'}`}><ImageIcon size={18}/></button>
-                                <button onClick={() => setStep('RANKING')} className={`p-2 rounded-lg transition-all ${step === 'RANKING' ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white'}`}><Trophy size={18}/></button>
+                                <button onClick={() => setStep('GALLERY')} className={`p-2.5 rounded-lg transition-all ${step === 'GALLERY' ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white'}`}><ImageIcon size={18}/></button>
+                                <button onClick={() => setStep('RANKING')} className={`p-2.5 rounded-lg transition-all ${step === 'RANKING' ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white'}`}><Trophy size={18}/></button>
                             </div>
                         ) : (
                             <button onClick={() => {
@@ -314,15 +331,15 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
 
                     <div className="flex-1 overflow-y-auto p-5 sm:p-8 lg:p-10 scrollbar-hide relative z-30">
                         
-                        {/* STEP 1: DATE (FUENTES REDUCIDAS) */}
+                        {/* STEP 1: DATE (Layout Corregido) */}
                         {step === 'DATE' && (
-                            <div className="animate-in fade-in slide-in-from-bottom-10 duration-700 max-w-2xl mx-auto">
+                            <div className="animate-in fade-in slide-in-from-bottom-10 duration-700 max-w-xl mx-auto">
                                 <div className="mb-8">
-                                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white mb-2 md:mb-4 tracking-tighter uppercase italic leading-[0.9] break-words">Reservá tu <span className="text-blue-500">Turno</span></h2>
+                                    <h2 className="text-4xl md:text-5xl font-black text-white mb-2 tracking-tighter uppercase italic leading-[0.9] break-words">Reservá tu <span className="text-blue-500">Turno</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px] border-l-2 border-blue-600 pl-3">Paso 1: Seleccioná el día</p>
                                 </div>
 
-                                {/* CALENDARIO (Solo centrado, sin la grilla cortada de las tarjetas) */}
+                                {/* CALENDARIO (Solo centrado, sin tarjetas apretadas) */}
                                 <div className="bg-slate-800/40 p-4 sm:p-6 rounded-[2rem] border border-white/10 flex items-center justify-between shadow-xl mb-8 backdrop-blur-md">
                                     <button onClick={() => handleDateChange(-1)} className="p-4 sm:p-6 bg-white/5 text-white hover:bg-white/10 rounded-2xl transition-all hover:scale-105 active:scale-95"><ChevronLeft size={24}/></button>
                                     <div className="text-center flex-1 min-w-0 px-2">
@@ -343,7 +360,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                         {step === 'SLOTS' && (
                             <div className="animate-in fade-in slide-in-from-right-16 duration-500">
                                 <div className="mb-8 border-b border-white/5 pb-6">
-                                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Elegí tu <span className="text-blue-500">Tiempo</span></h2>
+                                    <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Elegí tu <span className="text-blue-500">Tiempo</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-3 border-l-2 border-blue-500 pl-3">Paso 2: Marcá los bloques de 30m</p>
                                 </div>
 
@@ -356,7 +373,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                                                 key={slot.id}
                                                 disabled={!isAvailable}
                                                 onClick={() => toggleSlotSelection(slot.id)}
-                                                className={`relative h-16 w-full rounded-xl text-base sm:text-lg font-black transition-all duration-300 border-2 flex flex-col items-center justify-center ${isSelected ? `${theme.primary} text-white border-white/40 shadow-lg scale-105 z-20` : isAvailable ? 'bg-slate-800/60 text-white border-white/10 hover:bg-slate-700 hover:border-white/30' : 'bg-slate-950/40 text-slate-700 border-transparent opacity-30 cursor-not-allowed grayscale'}`}
+                                                className={`relative h-16 sm:h-20 w-full rounded-xl text-base sm:text-lg font-black transition-all duration-300 border-2 flex flex-col items-center justify-center ${isSelected ? `${theme.primary} text-white border-white/40 shadow-lg scale-105 z-20` : isAvailable ? 'bg-slate-800/60 text-white border-white/10 hover:bg-slate-700 hover:border-white/30' : 'bg-slate-950/40 text-slate-700 border-transparent opacity-30 cursor-not-allowed grayscale'}`}
                                             >
                                                 {slot.time}
                                                 {slot.isNextDay && <span className={`text-[7px] uppercase tracking-widest font-black absolute bottom-1.5 ${isSelected ? 'text-white' : 'text-blue-400'}`}>Madrugada</span>}
@@ -380,11 +397,11 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                         {step === 'COURT_SELECT' && (
                             <div className="animate-in fade-in slide-in-from-right-16 duration-500 max-w-2xl mx-auto">
                                 <div className="mb-8">
-                                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Elegí la <span className="text-blue-500">Cancha</span></h2>
+                                    <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Elegí la <span className="text-blue-500">Cancha</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-3 border-l-2 border-blue-500 pl-3">Paso 3: Disponibles para tu horario</p>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-4 mb-8">
+                                <div className="grid grid-cols-1 gap-4 sm:gap-6 mb-10">
                                     {availableCourtsForSelection.length === 0 ? (
                                         <div className="text-center py-20 bg-white/5 rounded-3xl border-2 border-dashed border-white/10 backdrop-blur-sm">
                                             <Moon size={48} className="mx-auto mb-4 text-slate-600 animate-pulse"/>
@@ -397,8 +414,8 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                                                 onClick={() => setSelectedCourtId(court.id)}
                                                 className={`p-5 sm:p-6 rounded-2xl border-2 transition-all flex items-center justify-between group relative overflow-hidden backdrop-blur-md ${selectedCourtId === court.id ? 'bg-blue-600/20 border-blue-500 shadow-lg scale-[1.01]' : 'bg-slate-800/60 border-white/5 hover:bg-slate-800/80 hover:border-white/20'}`}
                                             >
-                                                <div className="flex items-center gap-4 text-left z-20 min-w-0">
-                                                    <div className={`w-14 h-14 rounded-xl flex items-center justify-center transition-all duration-500 shrink-0 ${selectedCourtId === court.id ? 'bg-blue-600 text-white scale-110 shadow-md' : 'bg-slate-900 text-slate-500 group-hover:bg-slate-800'}`}>
+                                                <div className="flex items-center gap-4 sm:gap-6 text-left z-20 min-w-0">
+                                                    <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-xl flex items-center justify-center transition-all duration-500 shrink-0 ${selectedCourtId === court.id ? 'bg-blue-600 text-white scale-110 shadow-md' : 'bg-slate-900 text-slate-500 group-hover:bg-slate-800'}`}>
                                                         <Navigation size={24}/>
                                                     </div>
                                                     <div className="min-w-0 pr-2">
@@ -418,10 +435,14 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                                                             <Check size={20} strokeWidth={3}/>
                                                         </div>
                                                     ) : (
-                                                        <div className="w-10 h-10 rounded-xl border-2 border-white/10 flex items-center justify-center text-white/10 group-hover:text-blue-500 transition-colors">
+                                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl border-2 border-white/10 flex items-center justify-center text-white/10 group-hover:text-blue-500 transition-colors">
                                                             <Plus size={20}/>
                                                         </div>
                                                     )}
+                                                </div>
+                                                
+                                                <div className="absolute right-0 bottom-0 translate-y-1/2 translate-x-1/4 opacity-[0.03] group-hover:opacity-[0.06] transition-all duration-1000 pointer-events-none">
+                                                    <LayoutGrid size={150}/>
                                                 </div>
                                             </button>
                                         ))
@@ -431,7 +452,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                                 <button 
                                     disabled={!selectedCourtId}
                                     onClick={() => setStep('FORM')} 
-                                    className={`w-full max-w-sm mx-auto ${theme.primary} text-white font-black py-5 rounded-2xl shadow-lg uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-20 transition-all active:scale-95 text-sm`}
+                                    className={`w-full max-w-sm mx-auto ${theme.primary} text-white font-black py-5 sm:py-6 rounded-2xl shadow-lg uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-20 transition-all active:scale-95 text-sm sm:text-base`}
                                 >
                                     Confirmar Cancha <ChevronRight size={20}/>
                                 </button>
@@ -442,16 +463,16 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                         {step === 'FORM' && (
                             <div className="animate-in fade-in slide-in-from-right-16 duration-500 flex flex-col h-full max-w-lg mx-auto">
                                 <div className="mb-10">
-                                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Tus <span className="text-blue-600">Datos</span></h2>
+                                    <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase italic leading-[0.9] break-words">Tus <span className="text-blue-600">Datos</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-3 border-l-2 border-blue-500 pl-3">Paso 4: Confirmación final</p>
                                 </div>
 
-                                <div className="space-y-6 flex-1">
+                                <div className="space-y-6 sm:space-y-8 flex-1">
                                     <div className="group">
                                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-2 block group-focus-within:text-blue-500 transition-colors">Nombre Completo</label>
                                         <div className="relative">
                                             <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-all duration-500" size={20} />
-                                            <input type="text" value={customerData.name} onChange={e => setCustomerData({...customerData, name: e.target.value})} className="w-full bg-slate-800/60 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-14 pr-4 text-white text-base font-bold outline-none focus:border-blue-500 transition-all shadow-inner" placeholder="Ej: Lionel Messi"/>
+                                            <input type="text" value={customerData.name} onChange={e => setCustomerData({...customerData, name: e.target.value})} className="w-full bg-slate-800/60 backdrop-blur-md border border-white/10 rounded-2xl py-4 sm:py-5 pl-14 pr-4 text-white text-base sm:text-lg font-bold outline-none focus:border-blue-500 transition-all shadow-inner" placeholder="Ej: Lionel Messi"/>
                                         </div>
                                     </div>
 
@@ -459,11 +480,11 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2 mb-2 block group-focus-within:text-green-500 transition-colors">WhatsApp Oficial</label>
                                         <div className="relative">
                                             <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-green-500 transition-all duration-500" size={20} />
-                                            <input type="tel" value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})} className="w-full bg-slate-800/60 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-14 pr-4 text-white text-base font-bold outline-none focus:border-green-500 transition-all shadow-inner font-mono" placeholder="11 1234 5678"/>
+                                            <input type="tel" value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})} className="w-full bg-slate-800/60 backdrop-blur-md border border-white/10 rounded-2xl py-4 sm:py-5 pl-14 pr-4 text-white text-base sm:text-lg font-bold outline-none focus:border-green-500 transition-all shadow-inner font-mono" placeholder="11 1234 5678"/>
                                         </div>
                                     </div>
 
-                                    <div onClick={() => setIsAgreed(!isAgreed)} className={`p-5 rounded-2xl border transition-all duration-300 flex items-start gap-4 cursor-pointer group shadow-md backdrop-blur-md ${isAgreed ? 'bg-blue-600/10 border-blue-500/50' : 'bg-slate-800/40 border-white/5 hover:bg-slate-800/60'}`}>
+                                    <div onClick={() => setIsAgreed(!isAgreed)} className={`p-5 sm:p-6 rounded-2xl border transition-all duration-300 flex items-start gap-4 cursor-pointer group shadow-md backdrop-blur-md ${isAgreed ? 'bg-blue-600/10 border-blue-500/50' : 'bg-slate-800/40 border-white/5 hover:bg-slate-800/60'}`}>
                                         <div className={`mt-0.5 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all shrink-0 ${isAgreed ? 'bg-blue-600 border-blue-600 shadow-md scale-110' : 'border-slate-600'}`}>
                                             {isAgreed && <Check size={14} className="text-white" strokeWidth={3}/>}
                                         </div>
@@ -478,16 +499,16 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
 
                         {/* VIEW: GALERÍA */}
                         {step === 'GALLERY' && (
-                            <div className="animate-in fade-in slide-in-from-bottom-12 duration-700 space-y-8 pb-20 max-w-5xl mx-auto">
-                                <div className="mb-8">
-                                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white mb-2 tracking-tighter uppercase italic leading-[0.9] break-words">Nuestro <span className="text-blue-500">Club</span></h2>
+                            <div className="animate-in fade-in slide-in-from-bottom-12 duration-700 space-y-8 md:space-y-10 pb-20 md:pb-0 max-w-6xl mx-auto">
+                                <div className="mb-8 md:mb-12">
+                                    <h2 className="text-4xl md:text-5xl font-black text-white mb-2 md:mb-4 tracking-tighter uppercase italic leading-[0.9] break-words">Nuestro <span className="text-blue-500">Club</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] border-l-2 border-blue-600 pl-3">Conoce nuestras instalaciones</p>
                                 </div>
                                 
                                 {config.gallery && config.gallery.length > 0 ? (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                                         {config.gallery.map((img, i) => (
-                                            <div key={i} className="h-56 md:h-64 w-full rounded-3xl overflow-hidden border border-white/10 shadow-xl group relative cursor-pointer bg-slate-900">
+                                            <div key={i} className="h-64 md:h-72 w-full rounded-3xl overflow-hidden border border-white/10 shadow-xl group relative cursor-pointer bg-slate-900">
                                                 <img src={img} alt={`Foto complejo ${i+1}`} className="w-full h-full object-cover transition-transform duration-[2000ms] group-hover:scale-110"/>
                                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-6">
                                                     <ImageIcon className="text-white drop-shadow-xl" size={24}/>
@@ -504,50 +525,65 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                             </div>
                         )}
 
-                        {/* VIEW: RANKING */}
+                        {/* VIEW: RANKING CON TABS DE CATEGORÍA */}
                         {step === 'RANKING' && (
-                            <div className="animate-in fade-in slide-in-from-bottom-12 duration-700 space-y-8 max-w-3xl mx-auto pb-20">
-                                <div className="mb-8">
-                                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white mb-2 tracking-tighter uppercase italic leading-[0.9] break-words">Ranking <span className="text-yellow-500">Torneo</span></h2>
+                            <div className="animate-in fade-in slide-in-from-bottom-12 duration-700 space-y-8 md:space-y-10 max-w-4xl mx-auto pb-20 md:pb-0">
+                                <div className="mb-6 md:mb-8">
+                                    <h2 className="text-4xl md:text-5xl font-black text-white mb-2 md:mb-4 tracking-tighter uppercase italic leading-[0.9] break-words">Ranking <span className="text-yellow-500">Torneo</span></h2>
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] border-l-2 border-yellow-500 pl-3">Tabla de posiciones oficial</p>
                                 </div>
+
+                                {/* TABS DE CATEGORÍAS */}
+                                {rankingCategories.length > 1 && (
+                                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                        {rankingCategories.map(cat => (
+                                            <button 
+                                                key={cat} 
+                                                onClick={() => setRankingCategory(cat)}
+                                                className={`px-4 py-2.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap ${rankingCategory === cat ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/20 scale-105' : 'bg-slate-800/80 text-slate-400 border border-white/5 hover:bg-slate-700 hover:text-white'}`}
+                                            >
+                                                {cat === 'Todas' ? '🏆 Todas' : `Categoría ${cat}`}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
 
                                 <div className="bg-slate-900/60 rounded-3xl border border-white/10 overflow-hidden shadow-xl backdrop-blur-xl">
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left">
                                             <thead className="bg-white/5 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-white/5">
                                                 <tr>
-                                                    <th className="p-4">Pos.</th>
-                                                    <th className="p-4">Jugador</th>
-                                                    <th className="p-4 text-center hidden sm:table-cell">Partidos</th>
-                                                    <th className="p-4 text-right text-yellow-500">Puntos</th>
+                                                    <th className="p-4 sm:p-6 w-16">Pos.</th>
+                                                    <th className="p-4 sm:p-6">Jugador</th>
+                                                    <th className="p-4 sm:p-6 text-center hidden sm:table-cell">Partidos</th>
+                                                    <th className="p-4 sm:p-6 text-right text-yellow-500">Puntos</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-white/5">
-                                                {config.tournamentRanking && config.tournamentRanking.length > 0 ? (
-                                                    config.tournamentRanking.sort((a,b) => b.points - a.points).map((player, i) => (
-                                                        <tr key={player.id} className="hover:bg-white/5 transition-all duration-300">
-                                                            <td className="p-4">
-                                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm italic shadow-sm ${i === 0 ? 'bg-yellow-500 text-black shadow-yellow-500/30' : i === 1 ? 'bg-slate-300 text-black shadow-slate-300/30' : i === 2 ? 'bg-orange-400 text-black shadow-orange-400/30' : 'bg-slate-800 text-slate-400'}`}>
+                                                {filteredRanking.length > 0 ? (
+                                                    filteredRanking.map((player, i) => (
+                                                        <tr key={player.id} className="hover:bg-white/5 transition-all duration-300 group">
+                                                            <td className="p-4 sm:p-6">
+                                                                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-sm sm:text-lg italic shadow-sm ${i === 0 ? 'bg-yellow-500 text-black shadow-yellow-500/30' : i === 1 ? 'bg-slate-300 text-black shadow-slate-300/30' : i === 2 ? 'bg-orange-400 text-black shadow-orange-400/30' : 'bg-slate-800 text-slate-400'}`}>
                                                                     #{i+1}
                                                                 </div>
                                                             </td>
-                                                            <td className="p-4 min-w-[120px]">
-                                                                <p className="text-white font-black uppercase italic text-base sm:text-xl mb-1 truncate">{player.name}</p>
+                                                            <td className="p-4 sm:p-6 min-w-[120px]">
+                                                                <p className="text-white font-black uppercase italic text-sm sm:text-xl mb-1 group-hover:translate-x-1 transition-transform truncate">{player.name}</p>
                                                                 <span className="text-[8px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded font-black uppercase tracking-widest whitespace-nowrap">Cat. {player.category}</span>
                                                             </td>
-                                                            <td className="p-4 text-center text-slate-400 font-mono font-bold text-sm hidden sm:table-cell">
+                                                            <td className="p-4 sm:p-6 text-center text-slate-400 font-mono font-bold text-sm hidden sm:table-cell">
                                                                 {player.matchesPlayed}
                                                             </td>
-                                                            <td className="p-4 text-right">
-                                                                <span className="font-black text-yellow-400 text-2xl sm:text-3xl font-mono">{player.points}</span>
+                                                            <td className="p-4 sm:p-6 text-right">
+                                                                <span className="font-black text-yellow-400 text-xl sm:text-3xl font-mono">{player.points}</span>
                                                             </td>
                                                         </tr>
                                                     ))
                                                 ) : (
                                                     <tr>
                                                         <td colSpan={4} className="p-10 text-center text-slate-500 italic font-bold uppercase text-[9px] tracking-widest">
-                                                            El ranking se publicará próximamente.
+                                                            Aún no hay jugadores registrados en esta categoría.
                                                         </td>
                                                     </tr>
                                                 )}
@@ -555,19 +591,38 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({ config, co
                                         </table>
                                     </div>
                                 </div>
+                                <div className="flex flex-col sm:flex-row items-center gap-4 p-6 bg-yellow-500/10 rounded-2xl border border-yellow-500/20 text-center sm:text-left">
+                                    <Trophy className="text-yellow-500 shrink-0" size={32} strokeWidth={1.5}/>
+                                    <div>
+                                        <p className="text-white font-black text-lg uppercase italic mb-1">Temporada Oficial</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Actualizado semanalmente en base a los resultados verificados.</p>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
 
-                    {/* --- FOOTER DE CONTROL PARA RESERVAS --- */}
+                    {/* --- FOOTER DE CONTROL PARA RESERVAS (Tamaño Seguro) --- */}
                     {(['DATE', 'SLOTS', 'COURT_SELECT', 'FORM'] as any).includes(step) && step !== 'DATE' && (
-                        <div className="bg-slate-950/95 backdrop-blur-2xl border-t border-white/10 p-5 shrink-0 z-50 shadow-2xl relative">
+                        <div className="bg-slate-950/95 backdrop-blur-2xl border-t border-white/10 p-5 md:p-8 shrink-0 z-50 shadow-2xl relative">
+                            {isPromoEligible && (
+                                <div className="mb-4 max-w-sm mx-auto flex items-center justify-center gap-2 text-[9px] font-black text-orange-400 bg-orange-500/10 py-2 rounded-lg border border-orange-500/20 uppercase tracking-widest animate-pulse">
+                                    <Flame size={14}/> {config.promoText || 'Promo Activada'} <Flame size={14}/>
+                                </div>
+                            )}
                             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-4xl mx-auto">
                                 <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
                                     <div className="flex flex-col">
                                         <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Total a Pagar</span>
                                         <div className="flex items-baseline gap-2">
                                             <span className="text-2xl sm:text-3xl font-black text-white italic tracking-tighter font-mono">${totalPrice.toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                    <div className="h-8 w-px bg-white/10 hidden sm:block"></div>
+                                    <div className="flex flex-col items-end sm:items-start hidden sm:flex">
+                                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Validación</span>
+                                        <div className="flex items-center gap-1 text-slate-400 uppercase font-black text-[9px] tracking-widest">
+                                            <Smartphone size={12} className="text-blue-500"/> WhatsApp
                                         </div>
                                     </div>
                                 </div>
