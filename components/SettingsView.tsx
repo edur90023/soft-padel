@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { ClubConfig, Court, User, Advertisement } from '../types';
+import { ClubConfig, Court, User, Advertisement, TournamentPlayer } from '../types';
 import { 
     Settings, LayoutGrid, Activity, Calendar, Users, Megaphone, Flame, 
     Info, CreditCard, Percent, ImageIcon, CheckCircle, Plus, Edit2, Trash2, 
-    Eye, EyeOff, X, Upload 
+    Eye, EyeOff, X, Upload, Trophy, Trash 
 } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -42,7 +42,7 @@ const processImage = (file: File): Promise<string> => {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, users, onUpdateConfig, onUpdateCourts, onUpdateUsers }) => {
     const [newCourtName, setNewCourtName] = useState('');
-    const [activeTab, setActiveTab] = useState<'general' | 'courts' | 'schedule' | 'users' | 'ads' | 'promos'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'courts' | 'schedule' | 'users' | 'ads' | 'promos' | 'gallery' | 'ranking'>('general');
     
     const [editingAd, setEditingAd] = useState<Advertisement | null>(null);
     const [adForm, setAdForm] = useState<Partial<Advertisement>>({ linkUrl: '', imageUrl: '', isActive: true });
@@ -50,6 +50,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
     const [editingCourt, setEditingCourt] = useState<Court | null>(null);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [userForm, setUserForm] = useState<User>({ id: '', name: '', username: '', password: '', role: 'OPERATOR' });
+
+    // --- ESTADOS PARA EL RANKING ---
+    const [playerForm, setPlayerForm] = useState<Partial<TournamentPlayer>>({ name: '', points: 0, matchesPlayed: 0, category: 'A' });
 
     const handleAdImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -144,6 +147,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
         }
     };
 
+    // --- NUEVAS FUNCIONES PARA GALERÍA Y RANKING ---
+    const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            try {
+                const optimized = await processImage(file);
+                const updatedGallery = [...(config.gallery || []), optimized];
+                onUpdateConfig({ ...config, gallery: updatedGallery });
+            } catch (error) {
+                alert("Error al procesar la foto.");
+            }
+        }
+    };
+
+    const handleAddPlayer = () => {
+        if (!playerForm.name) return;
+        const newPlayer: TournamentPlayer = {
+            id: Date.now().toString(),
+            name: playerForm.name,
+            points: playerForm.points || 0,
+            matchesPlayed: playerForm.matchesPlayed || 0,
+            category: playerForm.category || 'A'
+        };
+        const updatedRanking = [...(config.tournamentRanking || []), newPlayer];
+        onUpdateConfig({ ...config, tournamentRanking: updatedRanking });
+        setPlayerForm({ name: '', points: 0, matchesPlayed: 0, category: 'A' });
+    };
+
     return (
         <div className="max-w-6xl mx-auto space-y-6 pb-24 animate-in fade-in">
             <div className="bg-slate-900/60 backdrop-blur-md p-6 rounded-2xl border border-white/10 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -153,6 +184,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
                         { id: 'general', label: 'General', icon: LayoutGrid }, 
                         { id: 'courts', label: 'Canchas', icon: Activity }, 
                         { id: 'schedule', label: 'Horarios', icon: Calendar }, 
+                        { id: 'gallery', label: 'Galería', icon: ImageIcon }, // NUEVA PESTAÑA
+                        { id: 'ranking', label: 'Ranking', icon: Trophy }, // NUEVA PESTAÑA
                         { id: 'users', label: 'Usuarios', icon: Users }, 
                         { id: 'ads', label: 'Publicidad', icon: Megaphone }, 
                         { id: 'promos', label: 'Promos', icon: Flame }
@@ -303,6 +336,102 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, courts, user
                                     })}
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- NUEVA PESTAÑA: GALERÍA --- */}
+                {activeTab === 'gallery' && (
+                    <div className="space-y-6 animate-in fade-in">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-white font-bold text-lg">Galería del Complejo</h3>
+                                <p className="text-slate-400 text-xs">Estas fotos se mostrarán en la vista pública de reservas.</p>
+                            </div>
+                            <label className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm shadow-lg cursor-pointer transition-colors">
+                                <Plus size={16}/> Subir Foto
+                                <input type="file" className="hidden" accept="image/*" onChange={handleAddPhoto}/>
+                            </label>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {config.gallery && config.gallery.length > 0 ? (
+                                config.gallery.map((img, i) => (
+                                    <div key={i} className="aspect-square rounded-xl overflow-hidden border border-white/10 group relative bg-slate-800">
+                                        <img src={img} className="w-full h-full object-cover" alt="Complejo" />
+                                        <button 
+                                            onClick={() => onUpdateConfig({ ...config, gallery: config.gallery.filter((_, idx) => idx !== i) })} 
+                                            className="absolute top-2 right-2 p-2 bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500"
+                                        >
+                                            <Trash size={16}/>
+                                        </button>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="col-span-full py-12 text-center text-slate-500 bg-slate-800/30 rounded-2xl border border-dashed border-white/10">
+                                    <ImageIcon size={48} className="mx-auto mb-2 opacity-50"/>
+                                    <p>No has subido ninguna foto aún.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- NUEVA PESTAÑA: RANKING --- */}
+                {activeTab === 'ranking' && (
+                    <div className="space-y-6 animate-in fade-in">
+                        <div className="bg-slate-800/50 p-6 rounded-2xl border border-white/5">
+                            <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2"><Trophy size={20} className="text-yellow-500"/> Agregar Jugador al Ranking</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                <div className="md:col-span-2">
+                                    <input type="text" placeholder="Nombre del Jugador" value={playerForm.name} onChange={e => setPlayerForm({...playerForm, name: e.target.value})} className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"/>
+                                </div>
+                                <div>
+                                    <input type="number" placeholder="Puntos" value={playerForm.points || ''} onChange={e => setPlayerForm({...playerForm, points: parseInt(e.target.value)})} className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"/>
+                                </div>
+                                <div>
+                                    <input type="number" placeholder="Partidos" value={playerForm.matchesPlayed || ''} onChange={e => setPlayerForm({...playerForm, matchesPlayed: parseInt(e.target.value)})} className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"/>
+                                </div>
+                                <button onClick={handleAddPlayer} disabled={!playerForm.name} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold uppercase text-xs disabled:opacity-50 transition-colors">
+                                    Agregar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-900/60 rounded-2xl border border-white/10 overflow-hidden shadow-lg">
+                            <table className="w-full text-left">
+                                <thead className="bg-white/5 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-white/5">
+                                    <tr>
+                                        <th className="p-4">Jugador</th>
+                                        <th className="p-4 text-center">Partidos</th>
+                                        <th className="p-4 text-center text-yellow-500">Puntos</th>
+                                        <th className="p-4 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {config.tournamentRanking && config.tournamentRanking.length > 0 ? (
+                                        config.tournamentRanking.sort((a,b) => b.points - a.points).map((p, i) => (
+                                            <tr key={p.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="p-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-slate-500 font-bold w-6">#{i+1}</span>
+                                                        <span className="font-bold text-white">{p.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-center text-slate-400">{p.matchesPlayed}</td>
+                                                <td className="p-4 text-center font-mono font-bold text-yellow-400">{p.points}</td>
+                                                <td className="p-4 text-right">
+                                                    <button onClick={() => onUpdateConfig({ tournamentRanking: config.tournamentRanking.filter(x => x.id !== p.id) })} className="p-2 text-slate-500 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10">
+                                                        <Trash2 size={16}/>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr><td colSpan={4} className="p-8 text-center text-slate-500 italic">No hay jugadores en el ranking.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 )}
